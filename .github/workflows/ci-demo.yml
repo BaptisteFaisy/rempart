@@ -4,10 +4,11 @@ name: ci-demo (apps de démonstration)
 # comportement vulnérable ET comportement corrigé selon les flags d'env.
 
 on:
+# Pas de filtre `paths:` sur pull_request : la file Mergify exige les
+# checks `backend`, `portal`, `demo` sur CHAQUE PR (un filtre les rendrait
+# absents sur une PR de doc, et la PR ne pourrait jamais fusionner).
+# Les filtres `paths:` restent sur les push vers main.
   pull_request:
-    paths:
-      - "demo/**"
-      - ".github/workflows/ci-demo.yml"
   push:
     branches: [main]
     paths:

@@ -4,10 +4,11 @@ name: ci-portal (build + vitest)
 # CI sous 5 minutes (règle user 2026-10-24).
 
 on:
+# Pas de filtre `paths:` sur pull_request : la file Mergify exige les
+# checks `backend`, `portal`, `demo` sur CHAQUE PR (un filtre les rendrait
+# absents sur une PR de doc, et la PR ne pourrait jamais fusionner).
+# Les filtres `paths:` restent sur les push vers main.
   pull_request:
-    paths:
-      - "portal/**"
-      - ".github/workflows/ci-portal.yml"
   push:
     branches: [main]
     paths:
