@@ -142,12 +142,23 @@ def post_remediation(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     if not ctx.sa:
         return error_response("Security Agent client not available", 500)
 
+    app = get_store(ctx).get_application(finding.app_id)
+    space_id = app.agent_space_id if app else None
+    if not space_id:
+        return error_response("Agent space inconnu pour cette application", 409)
+
     evidence = finding.evidence if isinstance(finding.evidence, dict) else {}
     sa_finding_id = evidence.get("sa_finding_id", finding_id)
-    resp = ctx.sa.start_code_remediation(sa_finding_id)
+    # StartCodeRemediation exige ``agentSpaceId`` + ``findingIds`` (tableau) ;
+    # ``pentestJobId``/``codeReviewJobId`` optionnels et exclusifs ; réponse vide.
+    resp = ctx.sa.start_code_remediation(
+        space_id,
+        [sa_finding_id],
+        pentest_job_id=finding.run_id or None,
+    )
 
     store = get_store(ctx)
-    finding.remediation_pr_url = resp.get("remediationPrUrl")
+    finding.remediation_pr_url = resp.get("remediationPrUrl") or finding.remediation_pr_url
     finding.status = "in_remediation"
     finding.updated_at = iso(utcnow())
     store.save_finding(finding)

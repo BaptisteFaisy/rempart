@@ -1,92 +1,191 @@
-"""Tests for the AWS Security Agent client wrapper (chapter 11.6)."""
+"""Tests du client AWS Continuum / Security Agent (doc officielle 2025-09-06).
 
-from rempart.orchestrator.sa_client import SecurityAgentClient
+Chaque action doit envoyer EXACTEMENT les paramètres requis documentés et lire
+les champs de réponse documentés. Un paramètre requis manquant doit lever une
+erreur explicite plutôt que de partir en 400 côté AWS.
+"""
+
+from typing import Any
+
+import pytest
+
+from rempart.orchestrator.sa_client import (
+    SecurityAgentClient,
+    job_source,
+    require_params,
+)
 
 
 class _RecordingClient:
-    """Minimal boto3-like double recording the calls made by the wrapper."""
+    """Double boto3 minimaliste qui enregistre les appels du wrapper."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict]] = []
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.responses: dict[str, dict[str, Any]] = {
+            "batch_get_pentest_jobs": {"pentestJobs": [{"pentestJobId": "job-1"}]},
+            "list_findings": {"findingsSummaries": [{"findingId": "f-1"}]},
+            "list_pentests": {"pentestSummaries": [{"pentestId": "pt-1"}]},
+            "list_pentest_jobs_for_pentest": {
+                "pentestJobSummaries": [{"pentestJobId": "job-9"}]
+            },
+        }
 
-    def __getattr__(self, name):
-        def _call(**kwargs):
+    def __getattr__(self, name: str):
+        def _call(**kwargs: Any) -> dict[str, Any]:
             self.calls.append((name, kwargs))
-            if name == "batch_get_pentest_jobs":
-                return {"pentestJobs": [{"jobId": "job-1"}]}
-            if name == "list_findings":
-                return {"findings": [{"findingId": "f-1"}]}
-            if name == "list_pentests":
-                return {"pentests": [{"pentestId": "pt-1"}]}
-            if name == "list_pentest_jobs_for_pentest":
-                return {"pentestJobs": [{"jobId": "job-9"}]}
-            return {"ok": True}
+            return self.responses.get(name, {"ok": True})
 
         return _call
 
 
-def test_wrapper_forwards_to_boto_client():
+def _client() -> tuple[SecurityAgentClient, _RecordingClient]:
     boto = _RecordingClient()
-    client = SecurityAgentClient(boto_client=boto)
-    client.start_pentest_job("pt-1")
-    assert boto.calls[-1] == ("start_pentest_job", {"pentestId": "pt-1"})
+    return SecurityAgentClient(boto_client=boto), boto
 
 
-def test_create_agent_space():
-    boto = _RecordingClient()
-    client = SecurityAgentClient(boto_client=boto)
+def test_create_agent_space_envoie_name():
+    client, boto = _client()
     client.create_agent_space("space-name")
-    assert boto.calls[-1][0] == "create_agent_space"
-    assert boto.calls[-1][1]["name"] == "space-name"
+    assert boto.calls[-1] == ("create_agent_space", {"name": "space-name"})
 
 
-def test_stop_pentest_job():
-    boto = _RecordingClient()
-    client = SecurityAgentClient(boto_client=boto)
-    client.stop_pentest_job("job-1")
-    assert boto.calls[-1] == ("stop_pentest_job", {"jobId": "job-1"})
-
-
-def test_batch_get_pentest_jobs_returns_list():
-    client = SecurityAgentClient(boto_client=_RecordingClient())
-    jobs = client.batch_get_pentest_jobs(["job-1"])
-    assert jobs == [{"jobId": "job-1"}]
-
-
-def test_list_findings_returns_list():
-    client = SecurityAgentClient(boto_client=_RecordingClient())
-    findings = client.list_findings("job-1")
-    assert findings == [{"findingId": "f-1"}]
-
-
-def test_list_pentests_returns_list():
-    client = SecurityAgentClient(boto_client=_RecordingClient())
-    assert client.list_pentests("space-1") == [{"pentestId": "pt-1"}]
-
-
-def test_list_pentest_jobs_for_pentest_returns_list():
-    client = SecurityAgentClient(boto_client=_RecordingClient())
-    assert client.list_pentest_jobs_for_pentest("pt-1") == [{"jobId": "job-9"}]
-
-
-def test_verify_target_domain():
-    boto = _RecordingClient()
-    client = SecurityAgentClient(boto_client=boto)
-    client.verify_target_domain("space-1", "dom-1")
+def test_create_target_domain_exige_le_domaine_et_la_methode():
+    client, boto = _client()
+    client.create_target_domain("shop.acme.com", "DNS_TXT")
     assert boto.calls[-1] == (
-        "verify_target_domain",
-        {"agentSpaceId": "space-1", "domainId": "dom-1"},
+        "create_target_domain",
+        {"targetDomainName": "shop.acme.com", "verificationMethod": "DNS_TXT"},
+    )
+    with pytest.raises(ValueError, match="targetDomainName"):
+        client.create_target_domain("")
+
+
+def test_verify_target_domain_exige_target_domain_id():
+    client, boto = _client()
+    client.verify_target_domain("dom-1")
+    assert boto.calls[-1] == ("verify_target_domain", {"targetDomainId": "dom-1"})
+    with pytest.raises(ValueError, match="targetDomainId"):
+        client.verify_target_domain("")
+
+
+def test_create_pentest_exige_espace_et_titre():
+    client, boto = _client()
+    client.create_pentest("space-1", "Livraison ShopLite")
+    assert boto.calls[-1] == (
+        "create_pentest",
+        {"agentSpaceId": "space-1", "title": "Livraison ShopLite"},
+    )
+    with pytest.raises(ValueError, match="title"):
+        client.create_pentest("space-1", "")
+
+
+def test_start_pentest_job_exige_espace_et_pentest():
+    client, boto = _client()
+    client.start_pentest_job("space-1", "pt-1")
+    assert boto.calls[-1] == (
+        "start_pentest_job",
+        {"agentSpaceId": "space-1", "pentestId": "pt-1"},
+    )
+    with pytest.raises(ValueError, match="pentestId"):
+        client.start_pentest_job("space-1", "")
+
+
+def test_stop_pentest_job_exige_espace_et_job():
+    client, boto = _client()
+    client.stop_pentest_job("space-1", "job-1")
+    assert boto.calls[-1] == (
+        "stop_pentest_job",
+        {"agentSpaceId": "space-1", "pentestJobId": "job-1"},
+    )
+    with pytest.raises(ValueError, match="pentestJobId"):
+        client.stop_pentest_job("space-1", "")
+
+
+def test_batch_get_pentest_jobs_lit_pentest_jobs():
+    client, boto = _client()
+    assert client.batch_get_pentest_jobs("space-1", ["job-1"]) == [
+        {"pentestJobId": "job-1"}
+    ]
+    assert boto.calls[-1] == (
+        "batch_get_pentest_jobs",
+        {"agentSpaceId": "space-1", "pentestJobIds": ["job-1"]},
+    )
+    with pytest.raises(ValueError, match="pentestJobIds"):
+        client.batch_get_pentest_jobs("space-1", [])
+
+
+def test_list_pentests_lit_pentest_summaries():
+    client, _ = _client()
+    assert client.list_pentests("space-1") == [{"pentestId": "pt-1"}]
+    with pytest.raises(ValueError, match="agentSpaceId"):
+        client.list_pentests("")
+
+
+def test_list_pentest_jobs_for_pentest_lit_les_summaries():
+    client, boto = _client()
+    assert client.list_pentest_jobs_for_pentest("space-1", "pt-1") == [
+        {"pentestJobId": "job-9"}
+    ]
+    assert boto.calls[-1] == (
+        "list_pentest_jobs_for_pentest",
+        {"agentSpaceId": "space-1", "pentestId": "pt-1"},
     )
 
 
-def test_start_code_remediation():
-    boto = _RecordingClient()
-    client = SecurityAgentClient(boto_client=boto)
-    client.start_code_remediation("f-1")
-    assert boto.calls[-1] == ("start_code_remediation", {"findingId": "f-1"})
+def test_list_findings_lit_findings_summaries():
+    client, boto = _client()
+    assert client.list_findings("space-1", pentest_job_id="job-1") == [
+        {"findingId": "f-1"}
+    ]
+    assert boto.calls[-1] == (
+        "list_findings",
+        {"agentSpaceId": "space-1", "pentestJobId": "job-1"},
+    )
+    with pytest.raises(ValueError, match="agentSpaceId"):
+        client.list_findings("")
+
+
+def test_update_finding_exige_espace_et_finding():
+    client, boto = _client()
+    client.update_finding("space-1", "f-1", status="CLOSED")
+    assert boto.calls[-1] == (
+        "update_finding",
+        {"agentSpaceId": "space-1", "findingId": "f-1", "status": "CLOSED"},
+    )
+    with pytest.raises(ValueError, match="findingId"):
+        client.update_finding("space-1", "")
+
+
+def test_start_code_remediation_prend_un_tableau_de_findings():
+    client, boto = _client()
+    client.start_code_remediation("space-1", ["f-1", "f-2"], pentest_job_id="job-1")
+    assert boto.calls[-1] == (
+        "start_code_remediation",
+        {
+            "agentSpaceId": "space-1",
+            "findingIds": ["f-1", "f-2"],
+            "pentestJobId": "job-1",
+        },
+    )
+    with pytest.raises(ValueError, match="findingIds"):
+        client.start_code_remediation("space-1", [])
+
+
+def test_job_source_refuse_les_deux_jobs_a_la_fois():
+    assert job_source(pentest_job_id="job-1") == {"pentestJobId": "job-1"}
+    assert job_source(code_review_job_id="cr-1") == {"codeReviewJobId": "cr-1"}
+    assert job_source() == {}
+    with pytest.raises(ValueError, match="exclusifs"):
+        job_source(pentest_job_id="job-1", code_review_job_id="cr-1")
+
+
+def test_require_params_liste_tous_les_manquants():
+    require_params("X", {"a": 1, "b": 2}, ("a", "b"))
+    with pytest.raises(ValueError, match="b"):
+        require_params("X", {"a": 1}, ("a", "b"))
 
 
 def test_client_is_lazy_when_no_boto_client_injected():
-    """No boto3 client is created at import time (tests must not need AWS)."""
+    """Aucun client boto3 n'est créé à l'import (les tests n'ont pas AWS)."""
     client = SecurityAgentClient()
     assert client._client is None

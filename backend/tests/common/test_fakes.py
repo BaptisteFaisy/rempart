@@ -1,5 +1,7 @@
 """Tests for fake clients (Security Agent, Model Client, GitHub, S3)."""
 
+import pytest
+
 from tests.fakes import (
     FakeGitHub,
     FakeModelClient,
@@ -9,20 +11,17 @@ from tests.fakes import (
 
 
 def test_fake_security_agent_client_lifecycle():
+    """Cycle de vie complet, avec les noms de la doc officielle (2025-09-06)."""
     sa = FakeSecurityAgentClient()
-    space = sa.create_agent_space("space-test")
-    space_id = space["agentSpaceId"]
+    space_id = sa.create_agent_space("space-test")["agentSpaceId"]
 
-    dom = sa.create_target_domain(space_id, "api.example.com")
-    assert dom["domain"] == "api.example.com"
-    v = sa.verify_target_domain(space_id, dom["domainId"])
-    assert v["status"] == "VERIFIED"
+    dom = sa.create_target_domain("api.example.com", "DNS_TXT")
+    assert dom["domainName"] == "api.example.com"
+    assert sa.verify_target_domain(dom["targetDomainId"])["status"] == "VERIFIED"
 
-    pt = sa.create_pentest(space_id, {"kind": "delivery"})
-    job = sa.start_pentest_job(pt["pentestId"])
-    job_id = job["jobId"]
+    pt = sa.create_pentest(space_id, "Livraison ShopLite")
+    job_id = sa.start_pentest_job(space_id, pt["pentestId"])["pentestJobId"]
 
-    # Seed findings with explicit fields
     sa.seed_finding(
         job_id,
         severity="High",
@@ -32,19 +31,30 @@ def test_fake_security_agent_client_lifecycle():
         parameter="id",
         title="Bypass tenant check",
     )
-    findings = sa.list_findings(job_id)
+    findings = sa.list_findings(space_id, pentest_job_id=job_id)
     assert len(findings) == 1
     assert findings[0]["riskType"] == "IDOR"
     assert findings[0]["parameter"] == "id"
 
-    # Batch get jobs
-    batch = sa.batch_get_pentest_jobs([job_id])
+    batch = sa.batch_get_pentest_jobs(space_id, [job_id])
     assert len(batch) == 1
     assert batch[0]["status"] == "COMPLETED"
+    assert batch[0]["pentestJobId"] == job_id
 
-    # Remediation
-    rem = sa.start_code_remediation(findings[0]["findingId"])
-    assert "remediationPrUrl" in rem
+    rem = sa.start_code_remediation(space_id, [findings[0]["findingId"]],
+                                    pentest_job_id=job_id)
+    assert "pullRequestUrl" in rem
+
+
+def test_fake_security_agent_client_valide_les_requis():
+    """Un paramètre requis manquant lève ValueError (protection anti-régression)."""
+    sa = FakeSecurityAgentClient()
+    with pytest.raises(ValueError, match="agentSpaceId"):
+        sa.start_pentest_job("", "pt-1")
+    with pytest.raises(ValueError, match="findingIds"):
+        sa.start_code_remediation("space-1", [])
+    with pytest.raises(ValueError, match="targetDomainName"):
+        sa.create_target_domain("")
 
 
 def test_fake_model_client():

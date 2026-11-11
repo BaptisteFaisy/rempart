@@ -20,21 +20,31 @@ DEFAULT_DOMAIN = "staging.example.com"
 def _load_app_or_404(ctx: ApiContext, app_id: str) -> tuple[Application | None, Response | None]:
     return load_or_404(get_store(ctx).get_application, app_id, "Application")
 
-def _setup_domains(sa: Any, space_id: str, domains: list[str]) -> list[str]:
-    """Create and verify each target domain, returning the verified names."""
+def _setup_domains(sa: Any, domains: list[str]) -> tuple[list[str], list[str]]:
+    """Create and verify each target domain; return (targetDomainIds, names).
+
+    CreateTargetDomain exige ``targetDomainName`` + ``verificationMethod`` et
+    répond avec ``targetDomainId`` ; VerifyTargetDomain exige ``targetDomainId``.
+    """
+    domain_ids: list[str] = []
     verified: list[str] = []
     for domain in domains:
-        dom_resp = sa.create_target_domain(space_id, domain)
-        domain_id = dom_resp.get("domainId", domain)
-        sa.verify_target_domain(space_id, domain_id)
-        verified.append(domain)
-    return verified
+        dom_resp = sa.create_target_domain(domain, verification_method="DNS_TXT")
+        domain_id = dom_resp.get("targetDomainId", "")
+        sa.verify_target_domain(domain_id)
+        domain_ids.append(domain_id)
+        verified.append(dom_resp.get("domainName") or domain)
+    return domain_ids, verified
 
 def _provision_space(sa: Any, app: Application) -> tuple[str, list[str]]:
-    """Create the agent space and its target domains; return (space_id, domains)."""
-    space = sa.create_agent_space(f"space-{app.name}")
+    """Create the target domains then the agent space; return (space_id, domains).
+
+    L'association espace/domaines passe par ``targetDomainIds`` (CreateAgentSpace),
+    CreateTargetDomain ne prenant pas d'``agentSpaceId``.
+    """
+    domain_ids, domains = _setup_domains(sa, app.domains or [DEFAULT_DOMAIN])
+    space = sa.create_agent_space(f"space-{app.name}", targetDomainIds=domain_ids)
     space_id = space.get("agentSpaceId") or space.get("spaceId")
-    domains = _setup_domains(sa, space_id, app.domains or [DEFAULT_DOMAIN])
     return space_id, domains
 
 def _build_config(app_id: str, sa_pentest_id: str, domains: list[str]) -> TestConfig:
@@ -55,7 +65,8 @@ def _onboard(ctx: ApiContext, app: Application, app_id: str) -> tuple[int, dict[
     store = get_store(ctx)
     space_id, verified_domains = _provision_space(ctx.sa, app)
 
-    pentest = ctx.sa.create_pentest(space_id, {"kind": "delivery", "app_id": app_id})
+    # CreatePentest exige ``agentSpaceId`` + ``title`` ; réponse : ``pentestId``.
+    pentest = ctx.sa.create_pentest(space_id, f"delivery-{app.name}")
     sa_pentest_id = pentest.get("pentestId", f"pt-{uuid.uuid4().hex[:8]}")
 
     app.agent_space_id = space_id

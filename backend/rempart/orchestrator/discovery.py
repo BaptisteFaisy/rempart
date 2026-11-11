@@ -46,10 +46,10 @@ def discover_cicd_runs(deps: Deps, since_minutes: int = DISCOVERY_WINDOW_MINUTES
         for config in deps.store.list_configs(app.app_id):
             if config.kind != "delivery":
                 continue
-            for job in _delivery_jobs(deps, config.sa_pentest_id):
+            for job in _delivery_jobs(deps, app.agent_space_id, config.sa_pentest_id):
                 if not _is_recent(job, since_minutes):
                     continue
-                job_id = str(job.get("jobId") or job.get("id") or "")
+                job_id = str(job.get("pentestJobId") or job.get("jobId") or job.get("id") or "")
                 if not job_id or deps.store.get_run(job_id) is not None:
                     continue
                 run = Run(
@@ -76,14 +76,18 @@ def discover_cicd_runs(deps: Deps, since_minutes: int = DISCOVERY_WINDOW_MINUTES
     return created
 
 
-def _delivery_jobs(deps: Deps, pentest_id: str) -> list[dict[str, Any]]:
-    """List the jobs of a delivery pentest, tolerating API variations."""
-    if not pentest_id:
+def _delivery_jobs(deps: Deps, space_id: str | None, pentest_id: str) -> list[dict[str, Any]]:
+    """List the jobs of a delivery pentest, tolerating API variations.
+
+    ListPentestJobsForPentest exige ``agentSpaceId`` + ``pentestId`` et renvoie
+    ``pentestJobSummaries`` (clé d'identité ``pentestJobId``).
+    """
+    if not space_id or not pentest_id:
         return []
     lister = getattr(deps.sa, "list_pentest_jobs_for_pentest", None)
     if lister is None:
         return []
     try:
-        return list(lister(pentest_id))
+        return list(lister(space_id, pentest_id))
     except Exception:  # noqa: BLE001 - a failed discovery must not break the loop
         return []

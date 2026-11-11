@@ -60,7 +60,9 @@ def test_discovery_creates_run_for_recent_job():
     store = _seed(FakeStore())
     sa = FakeSecurityAgentClient()
     now = iso(utcnow())
-    sa.pentests["pt-delivery"] = {"pentestId": "pt-delivery", "spaceId": "space-1"}
+    sa.pentests["pt-delivery"] = {
+        "pentestId": "pt-delivery", "agentSpaceId": "space-1", "title": "Livraison"
+    }
     sa.jobs["job-cicd"] = {
         "jobId": "job-cicd",
         "pentestId": "pt-delivery",
@@ -79,10 +81,13 @@ def test_discovery_creates_run_for_recent_job():
 def test_discovery_is_idempotent():
     store = _seed(FakeStore())
     sa = FakeSecurityAgentClient()
-    sa.pentests["pt-delivery"] = {"pentestId": "pt-delivery", "spaceId": "space-1"}
+    sa.pentests["pt-delivery"] = {
+        "pentestId": "pt-delivery", "agentSpaceId": "space-1", "title": "Livraison"
+    }
     sa.jobs["job-cicd"] = {
-        "jobId": "job-cicd",
+        "pentestJobId": "job-cicd",
         "pentestId": "pt-delivery",
+        "agentSpaceId": "space-1",
         "status": "COMPLETED",
         "startedAt": iso(utcnow()),
     }
@@ -97,10 +102,13 @@ def test_discovery_is_idempotent():
 def test_discovery_ignores_old_jobs():
     store = _seed(FakeStore())
     sa = FakeSecurityAgentClient()
-    sa.pentests["pt-delivery"] = {"pentestId": "pt-delivery", "spaceId": "space-1"}
+    sa.pentests["pt-delivery"] = {
+        "pentestId": "pt-delivery", "agentSpaceId": "space-1", "title": "Livraison"
+    }
     sa.jobs["job-old"] = {
-        "jobId": "job-old",
+        "pentestJobId": "job-old",
         "pentestId": "pt-delivery",
+        "agentSpaceId": "space-1",
         "status": "COMPLETED",
         "startedAt": "2020-01-01T00:00:00Z",
     }

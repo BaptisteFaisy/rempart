@@ -89,8 +89,12 @@ def post_run(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     if err or not config:
         return err  # type: ignore[return-value]
 
-    job_resp = ctx.sa.start_pentest_job(config.sa_pentest_id)
-    job_id = job_resp.get("jobId", f"job-{uuid.uuid4().hex[:8]}")
+    if not app.agent_space_id:
+        return error_response("Application non embarquée (pas d'agent space)", 409)
+
+    # StartPentestJob exige ``agentSpaceId`` + ``pentestId`` ; réponse : ``pentestJobId``.
+    job_resp = ctx.sa.start_pentest_job(app.agent_space_id, config.sa_pentest_id)
+    job_id = job_resp.get("pentestJobId") or job_resp.get("jobId") or f"job-{uuid.uuid4().hex[:8]}"
 
     run = _build_run(ctx, app, config, job_id)
     store = get_store(ctx)
@@ -147,8 +151,13 @@ def stop_run(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     if run.status not in ("queued", "running"):
         return error_response(f"Run '{run_id}' n'est pas en cours d'exécution", 409)
 
-    if ctx.sa:
-        ctx.sa.stop_pentest_job(run_id)
+    app, err = _load_app_or_404(ctx, run.app_id)
+    if err or not app:
+        return err  # type: ignore[return-value]
+
+    if ctx.sa and app.agent_space_id:
+        # StopPentestJob exige ``agentSpaceId`` + ``pentestJobId``.
+        ctx.sa.stop_pentest_job(app.agent_space_id, run_id)
 
     store = get_store(ctx)
     run.status = "stopped"

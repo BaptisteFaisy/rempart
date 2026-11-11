@@ -172,51 +172,78 @@ def try_merge(repo, token, pr, required):
     return 'error'
 
 
-def handle_pr(pr, repo, token, required, dry=False):
-    num = pr['number']
-    sha = pr['head']['sha']
-    base_ref = pr['base']['ref']
-    mergeable = pr.get('mergeable')           # None = calcul en cours
-    mergeable_state = pr.get('mergeable_state') or ''
+CONFLICT_SUMMARY = ('Le gate ne résout pas les conflits lui-même : le balayeur '
+                    '`conflict-resolver` saisit l agent InferHub (toutes les 10 min). '
+                    'Rebase manuel possible, ou label `hermes/intervention-humaine` '
+                    'pour suspendre.')
 
+
+def pr_freshness(pr, repo, token):
+    """(behind, fresh, conflicts) pour une PR : retard sur la base et conflit reel.
+
+    `behind = -1` quand la comparaison est illisible (on ne conclut pas).
+    Un conflit n'est avéré que si `mergeable is False` ET `mergeable_state`
+    vaut `dirty` : `unstable` signifie seulement « recalcul en cours ».
+    """
+    base_ref = pr['base']['ref']
+    sha = pr['head']['sha']
     sc, cmp_ = api('GET', '/repos/%s/compare/%s...%s' % (repo, base_ref, sha),
                    token=token)
     behind = cmp_.get('behind_by') if sc == 200 else -1
     behind = behind if isinstance(behind, int) else -1
-    fresh = behind == 0
-    conflicts = (mergeable is False and mergeable_state == 'dirty')
+    conflicts = (pr.get('mergeable') is False
+                 and (pr.get('mergeable_state') or '') == 'dirty')
+    return behind, behind == 0, conflicts
+
+
+def escalate_conflict(pr, repo, token, title):
+    """Check rouge + label conflit (retrait du label approuvé)."""
+    sha = pr['head']['sha']
+    create_check(repo, token, sha, False, title, CONFLICT_SUMMARY)
+    set_label(pr, repo, token, LABEL_CONFLIT, True)
+    set_label(pr, repo, token, LABEL_OK, False)
+
+
+def handle_pr(pr, repo, token, required, dry=False):
+    num = pr['number']
+    sha = pr['head']['sha']
+    base_ref = pr['base']['ref']
+
+    behind, fresh, conflicts = pr_freshness(pr, repo, token)
 
     if conflicts:
-        create_check(repo, token, sha, False,
-                     'Conflits avec %s — intervention humaine' % base_ref,
-                     'Le gate ne résout pas les conflits (pas d IA ici). '
-                     'Rebase manuel puis push, ou utilise le label '
-                     '`hermes/intervention-humaine` pour suspendre.')
-        set_label(pr, repo, token, LABEL_CONFLIT, True)
-        set_label(pr, repo, token, LABEL_OK, False)
+        escalate_conflict(pr, repo, token,
+                          'Conflits avec %s — agent de conflits saisi' % base_ref)
         return 'conflict'
     set_label(pr, repo, token, LABEL_CONFLIT, False)
 
     if not fresh:
-        if dry:
-            print('[gate] #%d : en retard de %s commit(s) — mise à jour serveur (dry-run)' % (num, behind))
-            return 'dry'
-        r = refresh_branch(repo, token, pr)
-        print('[gate] #%d : en retard de %s → refresh %s' % (num, behind, r), flush=True)
-        if r == 'refreshed':
-            # Le push de la mise à jour est un push de bot : aucun workflow ne se
-            # déclenche. Ré-évaluation et merge DANS CE RUN.
-            return settle_after_refresh(repo, token, num, required, dry=dry)
-        if r == 'conflict':
-            # La mise à jour serveur a été refusée : conflit réel après tout.
-            create_check(repo, token, sha, False,
-                         'Conflits avec %s — intervention humaine' % base_ref,
-                         'La mise à jour automatique a été refusée. Fusionner '
-                         'main, résoudre puis push, ou label `hermes/intervention-humaine`.')
-            set_label(pr, repo, token, LABEL_CONFLIT, True)
-            set_label(pr, repo, token, LABEL_OK, False)
-        return r
+        return handle_stale(pr, repo, token, required, behind, base_ref, dry=dry)
+    return handle_fresh(pr, repo, token, required, num, sha, dry=dry)
 
+
+def handle_stale(pr, repo, token, required, behind, base_ref, dry=False):
+    """PR en retard sur la base : mise à jour serveur, puis re-évaluation."""
+    num = pr['number']
+    if dry:
+        print('[gate] #%d : en retard de %s commit(s) — mise à jour serveur '
+              '(dry-run)' % (num, behind))
+        return 'dry'
+    r = refresh_branch(repo, token, pr)
+    print('[gate] #%d : en retard de %s → refresh %s' % (num, behind, r), flush=True)
+    if r == 'refreshed':
+        # Le push de la mise à jour est un push de bot : aucun workflow ne se
+        # déclenche. Ré-évaluation et merge DANS CE RUN.
+        return settle_after_refresh(repo, token, num, required, dry=dry)
+    if r == 'conflict':
+        # La mise à jour serveur a été refusée : conflit réel après tout.
+        escalate_conflict(pr, repo, token,
+                          'Conflits avec %s — agent de conflits saisi' % base_ref)
+    return r
+
+
+def handle_fresh(pr, repo, token, required, num, sha, dry=False):
+    """PR fraîche : label OK, check vert, puis merge (ou dry-run)."""
     set_label(pr, repo, token, LABEL_OK, True)
     create_check(repo, token, sha, True,
                  'PR à jour — merge par le gate',

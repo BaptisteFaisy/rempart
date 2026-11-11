@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from rempart.common.budget import check_budget, consume, estimate_cost
+from rempart.common.budget import (
+    BudgetVerdict,
+    check_budget,
+    consume,
+    estimate_cost,
+)
 from rempart.common.config import Settings
 from rempart.common.fingerprint import fingerprint as make_fingerprint
 from rempart.common.models import (
@@ -104,11 +109,12 @@ def budget_gate(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
 def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
     """Start the Security Agent pentest job and record the run."""
     app = _app_of(deps, payload["app_id"])
-    if app is None:
+    if app is None or not app.agent_space_id:
         return {**payload, "error": "unknown_application"}
 
-    resp = deps.sa.start_pentest_job(payload["pentest_id"], **{})
-    job_id = resp.get("jobId") or resp.get("job_id") or f"job-{uuid.uuid4().hex[:8]}"
+    # StartPentestJob : agentSpaceId + pentestId requis ; réponse ``pentestJobId``.
+    resp = deps.sa.start_pentest_job(app.agent_space_id, payload["pentest_id"])
+    job_id = resp.get("pentestJobId") or resp.get("jobId") or f"job-{uuid.uuid4().hex[:8]}"
     run = Run(
         run_id=job_id,
         config_id=payload.get("config_id", ""),
@@ -132,37 +138,52 @@ def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # 3. Poll run (budget auto-stop, R8)
 # --------------------------------------------------------------------------- #
-def poll_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
-    """Refresh the run status, consume task hours, stop the job on budget overrun."""
-    run = deps.store.get_run(payload["run_id"])
-    if run is None:
-        return {**payload, "error": "unknown_run"}
+TERMINAL_STATUSES = ("completed", "failed", "stopped")
 
-    jobs = deps.sa.batch_get_pentest_jobs([run.run_id])
+
+def _poll_job(deps: Deps, run: Run, space_id: str) -> tuple[str, float]:
+    """Lit l'état du job côté Continuum et rend (statut, heures-tâches).
+
+    BatchGetPentestJobs exige ``agentSpaceId`` + ``pentestJobIds`` (tableau).
+    """
+    jobs = deps.sa.batch_get_pentest_jobs(space_id, [run.run_id])
     job = jobs[0] if jobs else {}
     status = str(job.get("status", run.status)).lower()
     task_hours = float(job.get("taskHours") or job.get("task_hours") or 0.0)
+    return status, task_hours
 
+
+def _consume_budget(deps: Deps, run: Run, task_hours: float) -> BudgetVerdict:
+    """Consomme les heures-tâches sur le budget du mois et rend le verdict."""
     tenant = _tenant_of(deps, run.tenant_id)
-    month = _month_now()
-    state = deps.store.get_budget(run.tenant_id, month)
+    state = deps.store.get_budget(run.tenant_id, _month_now())
     new_state, verdict = consume(state, task_hours, tenant.monthly_budget_hours)
     deps.store.save_budget(new_state)
+    return verdict
 
-    stopped = False
-    if verdict.auto_stop and status not in ("completed", "failed", "stopped"):
-        deps.sa.stop_pentest_job(run.run_id)
-        status = "stopped"
-        stopped = True
-        deps.store.append_audit(
-            "orchestrator", "run.auto_stopped", "run", run.run_id, "budget"
-        )
 
-    ended_at = iso(utcnow()) if status in ("completed", "failed", "stopped") else None
+def _auto_stop_if_needed(
+    deps: Deps, run: Run, space_id: str, status: str, verdict: BudgetVerdict
+) -> tuple[str, bool]:
+    """Arrête le test si le budget est épuisé (R8). Rend (statut, arrêté)."""
+    if not verdict.auto_stop or status in TERMINAL_STATUSES:
+        return status, False
+    # StopPentestJob exige ``agentSpaceId`` + ``pentestJobId``.
+    deps.sa.stop_pentest_job(space_id, run.run_id)
+    deps.store.append_audit(
+        "orchestrator", "run.auto_stopped", "run", run.run_id, "budget"
+    )
+    return "stopped", True
+
+
+def _record_run_progress(
+    deps: Deps, run: Run, status: str, task_hours: float
+) -> None:
+    """Reporte le statut, la durée et le coût estimé sur la fiche du test."""
+    ended_at = iso(utcnow()) if status in TERMINAL_STATUSES else None
     duration = None
     if ended_at and run.started_at:
         duration = (parse_iso(ended_at) - parse_iso(run.started_at)).total_seconds()
-
     run.status = status
     run.task_hours = task_hours
     run.cost_usd = estimate_cost(task_hours, deps.settings.hourly_rate)
@@ -170,13 +191,30 @@ def poll_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
     run.duration_s = duration
     deps.store.save_run(run)
 
+
+def poll_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Refresh the run status, consume task hours, stop the job on budget overrun."""
+    run = deps.store.get_run(payload["run_id"])
+    if run is None:
+        return {**payload, "error": "unknown_run"}
+
+    app = _app_of(deps, run.app_id)
+    space_id = app.agent_space_id if app else None
+    if not space_id:
+        return {**payload, "error": "unknown_agent_space"}
+
+    status, task_hours = _poll_job(deps, run, space_id)
+    verdict = _consume_budget(deps, run, task_hours)
+    status, stopped = _auto_stop_if_needed(deps, run, space_id, status, verdict)
+    _record_run_progress(deps, run, status, task_hours)
+
     return {
         **payload,
         "run_status": status,
         "task_hours": task_hours,
         "budget_pct": verdict.pct,
         "auto_stopped": stopped,
-        "done": status in ("completed", "failed", "stopped"),
+        "done": status in TERMINAL_STATUSES,
     }
 
 
@@ -184,7 +222,9 @@ def poll_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
 # 4. Collect findings (dedup, regression, priority)
 # --------------------------------------------------------------------------- #
 def _finding_from_sa(raw: dict[str, Any], app: Application, run_id: str) -> Finding:
-    severity = str(raw.get("severity", "Medium"))
+    # FindingSummary documenté : name/riskLevel ; Rempart accepte aussi les
+    # champs détaillés (title/severity) renvoyés par BatchGetFindings/fakes.
+    severity = str(raw.get("severity") or raw.get("riskLevel") or "Medium")
     confidence = str(raw.get("confidence", "Medium"))
     risk_type = str(raw.get("riskType") or raw.get("risk_type") or "Unknown")
     entry_point = str(raw.get("entryPoint") or raw.get("entry_point") or "")
@@ -204,7 +244,7 @@ def _finding_from_sa(raw: dict[str, Any], app: Application, run_id: str) -> Find
         tenant_id=app.tenant_id,
         run_id=run_id,
         fingerprint=make_fingerprint(app.app_id, risk_type, entry_point, parameter),
-        title=str(raw.get("title", "Untitled finding")),
+        title=str(raw.get("title") or raw.get("name") or "Untitled finding"),
         risk_type=risk_type,
         severity=severity,
         confidence=confidence,
@@ -228,7 +268,11 @@ def collect_findings(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
     if app is None:
         return {**payload, "error": "unknown_application"}
 
-    raws = deps.sa.list_findings(payload["run_id"])
+    # ListFindings : agentSpaceId requis ; pentestJobId optionnel ;
+    # champs documentés : name/riskLevel (FindingSummary).
+    raws = deps.sa.list_findings(
+        app.agent_space_id or "", pentest_job_id=payload["run_id"]
+    )
     created: list[Finding] = []
     duplicates = 0
     regressions = 0
@@ -354,20 +398,36 @@ def _ticket_body(finding: Finding) -> str:
 # 7. Request remediation (EF-COR-03)
 # --------------------------------------------------------------------------- #
 def request_remediation(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
-    """Ask Security Agent for a remediation pull request."""
-    links: list[str] = []
+    """Ask Security Agent for a remediation pull request (StartCodeRemediation).
+
+    L'API documentée exige ``agentSpaceId`` + ``findingIds`` (tableau) avec
+    ``pentestJobId`` ou ``codeReviewJobId`` (exclusifs) et répond avec un corps
+    vide : la PR n'est donc pas renvoyée ; on marque le finding
+    ``in_remediation`` et on retourne les identifiants de findings traités.
+    """
+    app = _app_of(deps, payload.get("app_id", ""))
+    space_id = app.agent_space_id if app else None
+    if not space_id:
+        return {**payload, "remediation_prs": [], "reason": "unknown_agent_space"}
+
+    started: list[str] = []
     for finding_id in payload.get("confirmed", []) or payload.get("queued", []):
         finding = deps.store.get_finding(finding_id)
-        if finding is None or finding.remediation_pr_url:
+        if finding is None or finding.remediation_pr_url or finding.status == "in_remediation":
             continue
-        resp = deps.sa.start_code_remediation(finding.finding_id)
+        resp = deps.sa.start_code_remediation(
+            space_id,
+            [finding.finding_id],
+            pentest_job_id=finding.run_id or None,
+        )
         url = resp.get("remediationPrUrl") or resp.get("pullRequestUrl")
         if url:
             finding.remediation_pr_url = url
-            finding.updated_at = iso(utcnow())
-            deps.store.save_finding(finding)
-            links.append(url)
-    return {**payload, "remediation_prs": links}
+        finding.status = "in_remediation"
+        finding.updated_at = iso(utcnow())
+        deps.store.save_finding(finding)
+        started.append(finding.finding_id)
+    return {**payload, "remediation_prs": started}
 
 
 # --------------------------------------------------------------------------- #
@@ -387,7 +447,7 @@ def close_or_reopen(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
             str(raw.get("entryPoint") or raw.get("entry_point") or ""),
             raw.get("parameter"),
         )
-        for raw in deps.sa.list_findings(run_id)
+        for raw in deps.sa.list_findings(app.agent_space_id or "", pentest_job_id=run_id)
     }
 
     closed: list[str] = []
