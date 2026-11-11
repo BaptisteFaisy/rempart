@@ -12,7 +12,13 @@ At every release, Continuum tests the deployed change, Rempart triages the
 findings, opens a ticket with a contractual deadline, requests a remediation
 pull request, and closes the finding only when a retest proves it is gone.
 
-**Portal:** `https://PORTAL_URL`
+**Portal (live, public):** `https://baptistefaisy.github.io/rempart/`
+
+> Served by GitHub Pages in **offline demo mode**: the data comes from the
+> frozen dataset `demo/seed/demo-dataset.json`, the same one served by
+> `scripts/serve_local.py`. No backend, no AWS account, no cost, and no real
+> customer data on a public URL. The portal displays an "OFFLINE DEMO MODE"
+> banner so nobody mistakes it for live data.
 
 ## Demo credentials
 

@@ -22,7 +22,8 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  # `contents: write` est requis pour pousser l'artefact sur la branche gh-pages.
+  contents: write
   pages: write
   id-token: write
 
@@ -66,27 +67,36 @@ jobs:
 
       - name: Copie index.html -> 404.html (routage SPA sur Pages)
         # GitHub Pages ne sait pas servir une SPA : un rafraîchissement sur
-        # /rempart/triage renverrait 404. Servir le même index.html en 404
-        # laisse le routeur React prendre la main.
+        # /rempart/triage renvoie un code 404 MAIS sert 404.html, donc le
+        # routeur React démarre et affiche la bonne page. Sans cette copie,
+        # l'utilisateur verrait la page d'erreur de GitHub.
         run: cp dist/index.html dist/404.html
 
-      - name: Préparer l'artefact Pages
-        uses: actions/configure-pages@v5
-
-      - name: Téléverser l'artefact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: portal/dist
-
-  deploy:
-    name: deploy-to-pages
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Publier sur GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # Publication sur la branche `gh-pages` (source Pages configurée en
+      # `legacy`). On n'utilise PAS actions/deploy-pages : il exige
+      # build_type=workflow, et les runners GitHub étaient en file d'attente
+      # >10 min lors de la première publication — pousser l'artefact built est
+      # immédiat et ne dépend d'aucun runner tiers.
+      - name: Publier sur la branche gh-pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          WORK="$(mktemp -d)"
+          git clone -q --depth 1 --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$WORK/site" \
+            || { git init -q -b gh-pages "$WORK/site"; }
+          find "$WORK/site" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp -r dist/. "$WORK/site/"
+          cd "$WORK/site"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "aucun changement à publier"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "deploy: portail Rempart ${GITHUB_SHA::7}"
+          git push -q origin gh-pages
+          echo "publié sur gh-pages (${GITHUB_SHA::7})"

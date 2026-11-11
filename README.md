@@ -196,13 +196,21 @@ handlers and the **real** authorisation layer — so tenant isolation is
 enforced for real: a `client_security` token from tenant A gets `403` on every
 tenant-B route. No AWS call is made, so nothing is billed.
 
-### Option B — hosted deployment (pending)
+### Option B — public URL, live now
 
-The control plane is not deployed yet: it needs AWS credentials and a verified
-domain. Placeholders below are filled in at deployment time and tracked in
+**https://baptistefaisy.github.io/rempart/**
+
+Published on GitHub Pages from the `gh-pages` branch by
+`.github/workflows/deploy-pages.yml`. It runs in **offline demo mode**: the data
+is the frozen dataset, the same one served by `scripts/serve_local.py`. No
+backend, no AWS account, no cost, and no real customer data on a public URL —
+the portal says so with an "OFFLINE DEMO MODE" banner.
+
+The full AWS-backed deployment (Cognito, DynamoDB, Step Functions, real
+Continuum calls) still needs credentials and a verified domain; tracked in
 [`docs/submission-checklist.md`](docs/submission-checklist.md).
 
-- **Portal URL**: `https://PORTAL_URL`
+- **Portal URL**: `https://baptistefaisy.github.io/rempart/`
 - **Judge credentials**: `JUDGE_USER` / `JUDGE_PASSWORD`, role `demo`
   (read-only, banner "Judge demo — read-only", one on-demand test per day on
   the minimal scope)
