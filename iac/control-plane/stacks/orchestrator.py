@@ -25,7 +25,12 @@ import aws_cdk.aws_stepfunctions as sfn
 import aws_cdk.aws_stepfunctions_tasks as tasks
 from constructs import Construct
 
-from ._helpers import DEFAULT_TABLE_PREFIX, create_python_lambda, handler_reference
+from ._helpers import (
+    DEFAULT_TABLE_PREFIX,
+    create_python_lambda,
+    handler_reference,
+    runtime_layer,
+)
 
 HANDLER_MODULE = "rempart.orchestrator.lambda_handlers"
 
@@ -104,6 +109,13 @@ class OrchestratorStack(cdk.Stack):
     # ------------------------------------------------------------------ #
     # Lambdas
     # ------------------------------------------------------------------ #
+    def _layers(self) -> list:
+        """Layer des dépendances tierces (mémoïsé) ; vide s'il n'est pas construit."""
+        if not hasattr(self, "_runtime_layer_cache"):
+            layer = runtime_layer(self, "RempartRuntimeLayer")
+            self._runtime_layer_cache = [layer] if layer else []
+        return self._runtime_layer_cache
+
     def _create_task_lambda(
         self,
         name: str,
@@ -115,6 +127,7 @@ class OrchestratorStack(cdk.Stack):
             f"Lambda{name.title().replace('_', '')}",
             handler=handler_reference(HANDLER_MODULE, name),
             environment=env,
+            layers=self._layers(),
             timeout_seconds=300,
             memory_size=1024,
         )

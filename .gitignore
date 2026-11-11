@@ -20,3 +20,6 @@ cdk.out/
 
 # CDK
 .cdk-out/
+
+# Layer Lambda : reconstruit par scripts/build_lambda_layer.sh
+iac/control-plane/lambda-layer/

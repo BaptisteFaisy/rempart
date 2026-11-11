@@ -11,7 +11,7 @@ import aws_cdk.aws_dynamodb as ddb
 import aws_cdk.aws_iam as iam
 from constructs import Construct
 
-from ._helpers import DEFAULT_TABLE_PREFIX, create_python_lambda
+from ._helpers import DEFAULT_TABLE_PREFIX, create_python_lambda, runtime_layer
 
 
 class ApiStack(cdk.Stack):
@@ -33,6 +33,13 @@ class ApiStack(cdk.Stack):
         self.jwt_authorizer = self._create_authorizer(user_pool, user_pool_client)
         self.http_api = self._create_http_api()
 
+    def _layers(self) -> list:
+        """Layer des dépendances tierces (mémoïsé) ; vide s'il n'est pas construit."""
+        if not hasattr(self, "_runtime_layer_cache"):
+            layer = runtime_layer(self, "RempartRuntimeLayer")
+            self._runtime_layer_cache = [layer] if layer else []
+        return self._runtime_layer_cache
+
     def _create_api_lambda(
         self,
         tables: dict[str, ddb.ITable],
@@ -52,6 +59,7 @@ class ApiStack(cdk.Stack):
                 "REMPART_FREE_TIER_ONLY": "1",
                 "REMPART_MAX_TASK_HOURS_PER_TEST": "5",
             },
+            layers=self._layers(),
             timeout_seconds=30,
             memory_size=1024,
         )

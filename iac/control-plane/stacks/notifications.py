@@ -7,7 +7,7 @@ import aws_cdk.aws_iam as iam
 import aws_cdk.aws_ses as ses
 from constructs import Construct
 
-from ._helpers import create_python_lambda
+from ._helpers import create_python_lambda, runtime_layer
 
 
 class NotificationsStack(cdk.Stack):
@@ -38,6 +38,13 @@ class NotificationsStack(cdk.Stack):
             description="Rempart notification Lambda ARN",
         )
 
+    def _layers(self) -> list:
+        """Layer des dépendances tierces (mémoïsé) ; vide s'il n'est pas construit."""
+        if not hasattr(self, "_runtime_layer_cache"):
+            layer = runtime_layer(self, "RempartRuntimeLayer")
+            self._runtime_layer_cache = [layer] if layer else []
+        return self._runtime_layer_cache
+
     def _create_lambda(self, from_domain: str) -> cdk.aws_lambda.Function:
         fn = create_python_lambda(
             self,
@@ -48,6 +55,7 @@ class NotificationsStack(cdk.Stack):
                 "REMPART_SES_CONFIGURATION_SET": self.configuration_set.configuration_set_name,
                 "REMPART_REGION": self.region,
             },
+            layers=self._layers(),
             timeout_seconds=60,
             memory_size=512,
         )
