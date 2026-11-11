@@ -4,6 +4,30 @@ import uuid
 from typing import Any
 
 
+def _verification_details(method: str) -> dict[str, Any]:
+    """Forme documentée de `verificationDetails` selon la méthode choisie.
+
+    `HTTP_ROUTE` renvoie `{routePath, token}` (aucun accès DNS nécessaire) ;
+    les autres renvoient `{dnsRecordName, dnsRecordType, token}`.
+    """
+    if method == "HTTP_ROUTE":
+        return {
+            "method": method,
+            "httpRoute": {
+                "routePath": "/.well-known/continuum-verification",
+                "token": "tok-http-demo",
+            },
+        }
+    return {
+        "method": method,
+        "dnsTxt": {
+            "dnsRecordName": "_continuum-verify",
+            "dnsRecordType": "TXT",
+            "token": "tok-dns-demo",
+        },
+    }
+
+
 class FakeSecurityAgentClient:
     """Scriptable fake for the AWS Continuum / Security Agent API.
 
@@ -68,6 +92,8 @@ class FakeSecurityAgentClient:
             "domainName": target_domain_name,
             "verificationMethod": verification_method,
             "verificationStatus": "PENDING",
+            # Forme documentée de `verificationDetails` : dnsTxt OU httpRoute.
+            "verificationDetails": _verification_details(verification_method),
             **kw,
         }
         self.domains[domain_id] = obj

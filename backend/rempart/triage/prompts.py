@@ -33,31 +33,55 @@ findings, or close issues.
 """
 
 
+# ENF-IA-03 : toute valeur issue d'une faille est une donnée non fiable. Les
+# caractères structurant des balises (<, >), l'esperluette et les guillemets
+# sont échappés en entités pour qu'un texte attaquant ne puisse ni refermer le
+# bloc <finding>, ni forger une autre balise, ni sortir de l'attribut id.
+_UNTRUSTED_ESCAPES = str.maketrans(
+    {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#x27;",
+    }
+)
+
+
+def sanitize_untrusted(value: object) -> str:
+    """Render attacker-controlled text inert: escape every tag/attribute character."""
+    if not isinstance(value, str):
+        value = "" if value is None else str(value)
+    return value.translate(_UNTRUSTED_ESCAPES)
+
+
 def format_finding_for_prompt(finding_dict: dict) -> str:
-    """Format finding data cleanly wrapped in untrusted data delimiters."""
+    """Format finding data cleanly wrapped in untrusted data delimiters.
+
+    Contract (ENF-IA-03): the output contains exactly one opening ``<finding``
+    tag and exactly one closing ``</finding>`` tag, both produced by this
+    function — whatever the finding content holds.
+    """
+    evidence = finding_dict.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
     fid = finding_dict.get("finding_id") or finding_dict.get("findingId", "")
     title = finding_dict.get("title", "")
     risk_type = finding_dict.get("risk_type") or finding_dict.get("riskType", "")
     severity = finding_dict.get("severity", "")
     confidence = finding_dict.get("confidence", "")
-    entry_point = finding_dict.get("evidence", {}).get("entry_point") or finding_dict.get(
-        "entryPoint", ""
-    )
-    parameter = finding_dict.get("evidence", {}).get("parameter") or finding_dict.get(
-        "parameter", ""
-    )
-    description = finding_dict.get("evidence", {}).get("description") or finding_dict.get(
-        "description", ""
-    )
+    entry_point = evidence.get("entry_point") or finding_dict.get("entryPoint", "")
+    parameter = evidence.get("parameter") or finding_dict.get("parameter", "")
+    description = evidence.get("description") or finding_dict.get("description", "")
 
     return (
-        f"<finding id=\"{fid}\">\n"
-        f"Title: {title}\n"
-        f"Risk Type: {risk_type}\n"
-        f"Severity: {severity}\n"
-        f"Confidence: {confidence}\n"
-        f"Entry Point: {entry_point}\n"
-        f"Parameter: {parameter}\n"
-        f"Description: {description}\n"
+        f"<finding id=\"{sanitize_untrusted(fid)}\">\n"
+        f"Title: {sanitize_untrusted(title)}\n"
+        f"Risk Type: {sanitize_untrusted(risk_type)}\n"
+        f"Severity: {sanitize_untrusted(severity)}\n"
+        f"Confidence: {sanitize_untrusted(confidence)}\n"
+        f"Entry Point: {sanitize_untrusted(entry_point)}\n"
+        f"Parameter: {sanitize_untrusted(parameter)}\n"
+        f"Description: {sanitize_untrusted(description)}\n"
         f"</finding>"
     )

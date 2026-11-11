@@ -65,6 +65,35 @@ flowchart LR
 
 ---
 
+## 📸 Screenshots
+
+All screenshots are taken from the **local demo** (frozen dataset, no AWS
+account, no cost) — regenerate them at any time with
+`./scripts/capture_screenshots.sh`.
+
+| Fleet (MSP view) | Triage queue |
+|---|---|
+| ![Fleet dashboard](docs/img/01-fleet.png) | ![Triage queue](docs/img/06-triage.png) |
+
+| Finding detail | Budget & forecast |
+|---|---|
+| ![Finding detail](docs/img/05-finding.png) | ![Budget](docs/img/07-budget.png) |
+
+<details>
+<summary>Every other screen (tenant, application, run, reports, login)</summary>
+
+| Screen | Image |
+|---|---|
+| Tenant | ![Tenant](docs/img/02-tenant.png) |
+| Application | ![Application](docs/img/03-application.png) |
+| Run (pentest job) | ![Run](docs/img/04-run.png) |
+| Monthly reports | ![Reports](docs/img/08-reports.png) |
+| Login / demo mode | ![Login](docs/img/09-login.png) |
+
+</details>
+
+---
+
 ## 🗂️ Repository Layout
 
 ```
@@ -217,11 +246,13 @@ AWS MSP AI Hackathon — Track 2, *Deliver AI-Driven Outcomes for Customers*.
 Submission deadline: **Friday 11 December 2026, 12:00 PT**.
 
 - [Devpost submission text](docs/devpost-submission.md) — ready to paste into the form
+- [What Rempart adds on top of AWS Continuum](docs/what-rempart-adds.md) — the answer to *"isn't this just a wrapper?"*, every claim backed by a file or a test
+- [Free-tier runbook](docs/free-tier-runbook.md) — the four coded locks that make a paid test impossible by default, and the zero-cost demo path
+- [AWS Continuum API verification](docs/api-verification.md) — action-by-action check against the official API reference, and the pricing trap we avoided
 - [Submission checklist](docs/submission-checklist.md) — official § 18.1 items, honest statuses and remaining blockers
 - [Test instructions for judges](docs/judging-test-instructions.md) — 10-minute guided tour, demo credentials, fallback path
 - [Video script](docs/video-script.md) — 3 minutes, timed shot by shot (recording is done by the team)
-- [AWS Continuum API verification](docs/api-verification.md) — action-by-action check against the official API reference, and the pricing trap we avoided
-- [Free-tier runbook](docs/free-tier-runbook.md) — the four coded locks that make a paid test impossible by default, and the zero-cost demo path
+- [100 ideas to continue the project](docs/roadmap-100-ideas.md) — ranked roadmap, annotated with judge impact / cost / risk
 
 ---
 
