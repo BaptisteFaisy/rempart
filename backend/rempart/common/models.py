@@ -60,6 +60,25 @@ class Tenant(_ItemMixin):
 
 @dataclass
 class Application(_ItemMixin):
+    """Application cliente suivie par Rempart.
+
+    ``test_windows`` (EF-ORC-08) liste les fenêtres pendant lesquelles un test
+    complet en production est autorisé (chapitre 15.1 : « un test en production
+    exige une fenêtre convenue »). Chaque fenêtre est un ``dict`` au format::
+
+        {"days": ["mon", "tue"], "start": "22:00", "end": "06:00",
+         "environment": "production"}
+
+    - ``days`` : jours où la fenêtre **démarre**, en abréviations anglaises de
+      trois lettres (lundi = ``mon``). Absent ou vide = tous les jours ; un nom
+      de jour non reconnu ne correspond à rien.
+    - ``start`` / ``end`` : heures ``HH:MM`` en **UTC**. ``start > end``
+      signifie que la fenêtre traverse minuit (22:00 → 06:00 couvre aussi le
+      début de matinée du jour suivant) ; ``start == end`` couvre 24 h.
+    - ``environment`` : optionnel ; quand il est présent, la fenêtre ne
+      s'applique qu'à cet environnement.
+    """
+
     app_id: str
     tenant_id: str
     name: str
@@ -74,6 +93,8 @@ class Application(_ItemMixin):
     ticket_channel: str
     context: dict[str, Any]
     created_at: str
+    # EF-ORC-08 : fenêtres de test convenues avec le client (format en docstring).
+    test_windows: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -128,6 +149,10 @@ class Finding(_ItemMixin):
     updated_at: str
     closed_at: str | None
     closed_by_run_id: str | None
+    # EF-COR-07 : acceptation de risque tracée — date de revue et auteur,
+    # posés uniquement quand un rôle habilité du client accepte le risque.
+    risk_review_at: str | None = None
+    risk_review_by: str | None = None
 
 
 @dataclass

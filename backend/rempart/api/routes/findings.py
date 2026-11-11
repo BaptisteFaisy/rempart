@@ -19,6 +19,12 @@ from rempart.common.timeutil import iso, utcnow
 
 CLIENT_SCOPED_ROLES = ("client_security", "client_dev", "executive", "demo")
 
+# EF-COR-07 (chapitre 6) : « Responsable sécurité ou DSI — Client — accepte un
+# risque, son organisation ». Aucun rôle MSP (analyst, platform_admin) ne peut
+# accepter un risque à la place du client ; le rôle ``client_security`` est le
+# seul habilité, et uniquement sur les failles de SON organisation.
+RISK_ACCEPTANCE_ROLES = ("client_security",)
+
 def _resolve_tenant_filter(principal: Principal, requested: str | None) -> tuple[str | None, bool]:
     """Return (effective_tenant_filter, denied)."""
     if principal.role in CLIENT_SCOPED_ROLES:
@@ -100,6 +106,35 @@ def _apply_decision_status(store: Any, finding: Finding, action: str) -> None:
         finding.updated_at = iso(utcnow())
         store.save_finding(finding)
 
+def _check_risk_acceptance(
+    principal: Principal, finding: Finding, justification: str
+) -> Response | None:
+    """Contrôle EF-COR-07 : rôle habilité du client propriétaire + motif tracé."""
+    if (
+        principal.role not in RISK_ACCEPTANCE_ROLES
+        or principal.tenant_id != finding.tenant_id
+    ):
+        return error_response(
+            "L'acceptation de risque est réservée au responsable sécurité du "
+            "client propriétaire de la faille (chapitre 6) ; un rôle MSP ne "
+            "peut pas accepter un risque à la place du client.",
+            403,
+        )
+    if not justification.strip():
+        return error_response(
+            "Une acceptation de risque exige une justification non vide "
+            "(sans motif tracé, elle ne vaut rien en audit).",
+            400,
+        )
+    return None
+
+def _record_risk_review(store: Any, finding: Finding, principal: Principal) -> None:
+    """Horodate l'acceptation de risque et en trace l'auteur (EF-COR-07)."""
+    finding.risk_review_at = iso(utcnow())
+    finding.risk_review_by = principal.user_id
+    finding.updated_at = finding.risk_review_at
+    store.save_finding(finding)
+
 def post_decision(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     """Record a human decision (confirm, false positive, risk accepted) on a finding."""
     principal, err = require_principal(ctx)
@@ -118,10 +153,18 @@ def post_decision(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     if not action:
         return error_response("Missing 'action' in body", 400)
 
+    justification = str(ctx.body.get("justification") or "")
+    if action == "risk_accepted":
+        err = _check_risk_acceptance(principal, finding, justification)
+        if err:
+            return err
+
     store = get_store(ctx)
-    decision = _build_decision(ctx, finding_id, action, ctx.body.get("justification", ""))
+    decision = _build_decision(ctx, finding_id, action, justification)
     store.save_decision(decision)
     _apply_decision_status(store, finding, action)
+    if action == "risk_accepted":
+        _record_risk_review(store, finding, principal)
 
     ctx.audit("finding.decision", "finding", finding_id)
     return 201, {"decision": decision.to_item(), "finding": finding.to_item()}
