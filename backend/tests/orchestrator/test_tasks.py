@@ -17,7 +17,7 @@ from tests.fakes import FakeGitHub, FakeSecurityAgentClient, FakeStore
 MONTHLY_BUDGET = 10.0
 
 
-def _seed(store=None, mandate="valid", budget=MONTHLY_BUDGET):
+def _seed(store=None, mandate="valid", budget=MONTHLY_BUDGET, free_tier=True):
     store = store or FakeStore()
     store.save_tenant(
         Tenant(
@@ -31,6 +31,7 @@ def _seed(store=None, mandate="valid", budget=MONTHLY_BUDGET):
             contacts=[],
             monthly_budget_hours=budget,
             mandate_status=mandate,
+            free_tier_confirmed=free_tier,
             created_at="2026-11-01T00:00:00Z",
         )
     )
@@ -320,3 +321,81 @@ def test_models_round_trip():
     assert finding.run_id == "job-1"
     assert finding.fingerprint
     assert isinstance(Finding.from_item(finding.to_item()), Finding)
+
+
+# --------------------------------------------------------------------------- #
+# Garde-fous anti-facture (free tier + plafond d'heures-tâches par test)
+# --------------------------------------------------------------------------- #
+def test_budget_gate_refuse_sans_free_tier_confirme():
+    """Hors free tier, une heure-tâche coûte 50 $ : aucun test sans confirmation."""
+    store = _seed(free_tier=False)
+    deps = _deps(store)
+    out = budget_gate({"tenant_id": "t-1", "app_id": "app-1"}, deps)
+    assert out["allowed"] is False
+    assert out["reason"] == "free_tier_not_confirmed"
+
+
+def test_budget_gate_autorise_quand_le_garde_fou_est_leve():
+    """REMPART_FREE_TIER_ONLY=0 : le garde-fou se désactive sans toucher au code."""
+    store = _seed(free_tier=False)
+    deps = _deps(store)
+    deps.settings.free_tier_only = False
+    out = budget_gate({"tenant_id": "t-1", "app_id": "app-1"}, deps)
+    assert out["allowed"] is True
+
+
+def test_le_refus_free_tier_est_audite():
+    store = _seed(free_tier=False)
+    deps = _deps(store)
+    budget_gate({"tenant_id": "t-1", "app_id": "app-1"}, deps)
+    actions = [e.action for e in deps.store.list_audit()]
+    assert "run.refused_free_tier" in actions
+
+
+def test_plafond_d_heures_par_test_arrete_le_job():
+    """Un test qui dépasse le plafond par test est arrêté, budget mensuel large."""
+    store = _seed(budget=1000.0)
+    deps = _deps(store)
+    deps.settings.max_task_hours_per_test = 1.0
+    deps.sa.task_hours = 6.0  # au-dessus du plafond de 1 h
+    out = start_run({"app_id": "app-1", "tenant_id": "t-1", "pentest_id": "pt-1"}, deps)
+    job_id = out["run_id"]
+    deps.sa.set_job_outcome(job_id, "RUNNING")
+    polled = poll_run({"app_id": "app-1", "tenant_id": "t-1", "run_id": job_id}, deps)
+    assert polled["auto_stopped"] is True
+    assert deps.store.get_run(job_id).status == "stopped"
+    reasons = [e.result for e in deps.store.list_audit() if e.action == "run.auto_stopped"]
+    assert "task_hour_cap" in reasons
+
+
+def test_plafond_zero_desactive_le_frein_par_test():
+    """cap = 0 : seul le budget mensuel gouverne (comportement historique)."""
+    store = _seed(budget=1000.0)
+    deps = _deps(store)
+    deps.settings.max_task_hours_per_test = 0.0
+    deps.sa.task_hours = 99.0
+    out = start_run({"app_id": "app-1", "tenant_id": "t-1", "pentest_id": "pt-1"}, deps)
+    job_id = out["run_id"]
+    deps.sa.set_job_outcome(job_id, "COMPLETED")
+    polled = poll_run({"app_id": "app-1", "tenant_id": "t-1", "run_id": job_id}, deps)
+    assert polled["auto_stopped"] is False
+
+
+def test_settings_lisent_les_garde_fous_depuis_l_environnement(monkeypatch):
+    from rempart.common.config import Settings
+
+    monkeypatch.setenv("REMPART_FREE_TIER_ONLY", "0")
+    monkeypatch.setenv("REMPART_MAX_TASK_HOURS_PER_TEST", "2.5")
+    settings = Settings.from_env()
+    assert settings.free_tier_only is False
+    assert settings.max_task_hours_per_test == 2.5
+
+
+def test_settings_garde_fous_actives_par_defaut(monkeypatch):
+    from rempart.common.config import Settings
+
+    monkeypatch.delenv("REMPART_FREE_TIER_ONLY", raising=False)
+    monkeypatch.delenv("REMPART_MAX_TASK_HOURS_PER_TEST", raising=False)
+    settings = Settings.from_env()
+    assert settings.free_tier_only is True
+    assert settings.max_task_hours_per_test == 5.0

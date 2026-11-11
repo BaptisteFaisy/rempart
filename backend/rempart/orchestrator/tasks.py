@@ -10,7 +10,6 @@ without AWS.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -20,56 +19,29 @@ from rempart.common.budget import (
     consume,
     estimate_cost,
 )
-from rempart.common.config import Settings
 from rempart.common.fingerprint import fingerprint as make_fingerprint
 from rempart.common.models import (
-    Application,
     Finding,
     Run,
-    Tenant,
     TestConfig,
 )
-from rempart.common.priority import compute_priority, due_date
 from rempart.common.timeutil import iso, parse_iso, utcnow
 
+from .findings_intake import collect_findings  # noqa: F401  (ré-export)
+from .task_types import (
+    TERMINAL_STATUSES,
+    Deps,
+)
+from .task_types import (
+    app_of as _app_of,
+)
+from .task_types import (
+    month_now as _month_now,
+)
+from .task_types import (
+    tenant_of as _tenant_of,
+)
 from .triage_dispatch import apply_proposals, load_findings, run_proposals
-
-SENSITIVE_DATA_TYPES = ("personal", "payment", "health")
-
-
-@dataclass
-class Deps:
-    """Dependencies injected in every task (store, AWS client, settings)."""
-
-    store: Any
-    sa: Any
-    settings: Settings = None  # type: ignore[assignment]
-    github: Any = None
-    model_client: Any = None
-
-    def __post_init__(self) -> None:
-        if self.settings is None:
-            self.settings = Settings()
-
-
-def _tenant_of(deps: Deps, tenant_id: str) -> Tenant | None:
-    return deps.store.get_tenant(tenant_id)
-
-
-def _app_of(deps: Deps, app_id: str) -> Application | None:
-    return deps.store.get_application(app_id)
-
-
-def _month_now() -> str:
-    return utcnow().strftime("%Y-%m")
-
-
-def _sensitive(app: Application) -> bool:
-    return any(dt in SENSITIVE_DATA_TYPES for dt in (app.data_types or []))
-
-
-def _exposed_critical(app: Application) -> bool:
-    return bool(app.internet_exposed) and app.criticality == "high"
 
 
 # --------------------------------------------------------------------------- #
@@ -87,6 +59,14 @@ def budget_gate(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
             "orchestrator", "run.refused_mandate", "tenant", tenant_id, "denied"
         )
         return {**payload, "allowed": False, "reason": "mandate_invalid"}
+
+    if deps.settings.free_tier_only and not tenant.free_tier_confirmed:
+        # Garde-fou anti-facture : hors free tier, une heure-tâche coûte 50 $.
+        # Tant que l'éligibilité n'est pas confirmée dans la console, aucun test.
+        deps.store.append_audit(
+            "orchestrator", "run.refused_free_tier", "tenant", tenant_id, "denied"
+        )
+        return {**payload, "allowed": False, "reason": "free_tier_not_confirmed"}
 
     state = deps.store.get_budget(tenant_id, _month_now())
     verdict = check_budget(state, tenant.monthly_budget_hours, deps.settings.hourly_rate)
@@ -138,7 +118,6 @@ def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # 3. Poll run (budget auto-stop, R8)
 # --------------------------------------------------------------------------- #
-TERMINAL_STATUSES = ("completed", "failed", "stopped")
 
 
 def _poll_job(deps: Deps, run: Run, space_id: str) -> tuple[str, float]:
@@ -163,15 +142,32 @@ def _consume_budget(deps: Deps, run: Run, task_hours: float) -> BudgetVerdict:
 
 
 def _auto_stop_if_needed(
-    deps: Deps, run: Run, space_id: str, status: str, verdict: BudgetVerdict
+    deps: Deps,
+    run: Run,
+    space_id: str,
+    status: str,
+    task_hours: float,
+    verdict: BudgetVerdict,
 ) -> tuple[str, bool]:
-    """Arrête le test si le budget est épuisé (R8). Rend (statut, arrêté)."""
-    if not verdict.auto_stop or status in TERMINAL_STATUSES:
+    """Arrête le test sur budget épuisé (R8) ou plafond par test dépassé.
+
+    Deux freins indépendants : le budget mensuel du client, et un plafond dur
+    d'heures-tâches pour UN test (`REMPART_MAX_TASK_HOURS_PER_TEST`, 5 h par
+    défaut) qui borne la facture même si le budget mensuel est large.
+    ``task_hours`` vient du poll en cours : la fiche du run n'est pas encore
+    mise à jour à ce stade.
+    """
+    if status in TERMINAL_STATUSES:
+        return status, False
+    cap = deps.settings.max_task_hours_per_test
+    over_cap = cap > 0 and task_hours > cap
+    reason = "task_hour_cap" if over_cap else "budget"
+    if not verdict.auto_stop and not over_cap:
         return status, False
     # StopPentestJob exige ``agentSpaceId`` + ``pentestJobId``.
     deps.sa.stop_pentest_job(space_id, run.run_id)
     deps.store.append_audit(
-        "orchestrator", "run.auto_stopped", "run", run.run_id, "budget"
+        "orchestrator", "run.auto_stopped", "run", run.run_id, reason
     )
     return "stopped", True
 
@@ -205,7 +201,9 @@ def poll_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
 
     status, task_hours = _poll_job(deps, run, space_id)
     verdict = _consume_budget(deps, run, task_hours)
-    status, stopped = _auto_stop_if_needed(deps, run, space_id, status, verdict)
+    status, stopped = _auto_stop_if_needed(
+        deps, run, space_id, status, task_hours, verdict
+    )
     _record_run_progress(deps, run, status, task_hours)
 
     return {
@@ -221,86 +219,6 @@ def poll_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # 4. Collect findings (dedup, regression, priority)
 # --------------------------------------------------------------------------- #
-def _finding_from_sa(raw: dict[str, Any], app: Application, run_id: str) -> Finding:
-    # FindingSummary documenté : name/riskLevel ; Rempart accepte aussi les
-    # champs détaillés (title/severity) renvoyés par BatchGetFindings/fakes.
-    severity = str(raw.get("severity") or raw.get("riskLevel") or "Medium")
-    confidence = str(raw.get("confidence", "Medium"))
-    risk_type = str(raw.get("riskType") or raw.get("risk_type") or "Unknown")
-    entry_point = str(raw.get("entryPoint") or raw.get("entry_point") or "")
-    parameter = raw.get("parameter")
-
-    result = compute_priority(
-        severity,
-        confidence,
-        exposed_critical=_exposed_critical(app),
-        sensitive_data=_sensitive(app),
-    )
-    created = utcnow()
-    deadline = due_date(result.priority, created)
-    return Finding(
-        finding_id=str(raw.get("findingId") or raw.get("id") or f"f-{uuid.uuid4().hex[:8]}"),
-        app_id=app.app_id,
-        tenant_id=app.tenant_id,
-        run_id=run_id,
-        fingerprint=make_fingerprint(app.app_id, risk_type, entry_point, parameter),
-        title=str(raw.get("title") or raw.get("name") or "Untitled finding"),
-        risk_type=risk_type,
-        severity=severity,
-        confidence=confidence,
-        priority=result.priority,
-        status="new",
-        due_at=iso(deadline) if deadline else None,
-        ticket_url=None,
-        remediation_pr_url=None,
-        evidence={"description": raw.get("description", "")},
-        cvss=raw.get("cvss") or {},
-        created_at=iso(created),
-        updated_at=iso(created),
-        closed_at=None,
-        closed_by_run_id=None,
-    )
-
-
-def collect_findings(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
-    """Fetch findings, skip duplicates, flag regressions, compute priority."""
-    app = _app_of(deps, payload["app_id"])
-    if app is None:
-        return {**payload, "error": "unknown_application"}
-
-    # ListFindings : agentSpaceId requis ; pentestJobId optionnel ;
-    # champs documentés : name/riskLevel (FindingSummary).
-    raws = deps.sa.list_findings(
-        app.agent_space_id or "", pentest_job_id=payload["run_id"]
-    )
-    created: list[Finding] = []
-    duplicates = 0
-    regressions = 0
-
-    for raw in raws:
-        finding = _finding_from_sa(raw, app, payload["run_id"])
-        existing = deps.store.find_by_fingerprint(app.app_id, finding.fingerprint)
-        if existing is not None:
-            if existing.status == "closed":
-                existing.status = "reopened"
-                existing.updated_at = iso(utcnow())
-                existing.closed_at = None
-                deps.store.save_finding(existing)
-                regressions += 1
-            else:
-                duplicates += 1
-            continue
-        deps.store.save_finding(finding)
-        created.append(finding)
-
-    return {
-        **payload,
-        "findings_created": [f.finding_id for f in created],
-        "duplicates_skipped": duplicates,
-        "regressions": regressions,
-    }
-
-
 # --------------------------------------------------------------------------- #
 # 5. Dispatch triage (guardrails applied by the triage module)
 # --------------------------------------------------------------------------- #

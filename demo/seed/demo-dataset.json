@@ -1,0 +1,563 @@
+{
+  "tenants": [
+    {
+      "tenant_id": "demo-a",
+      "name": "Northwind Retail",
+      "aws_account_id": "000000000000",
+      "region": "eu-west-3",
+      "role_arn": "arn:aws:iam::000000000000:role/rempart-ops-demo-a",
+      "external_id": "ext-demo-a",
+      "plan": "continu",
+      "contacts": [
+        {
+          "name": "Ops",
+          "email": "ops@demo-a.example"
+        }
+      ],
+      "monthly_budget_hours": 40.0,
+      "mandate_status": "valid",
+      "created_at": "2026-10-05T08:00:00Z",
+      "free_tier_confirmed": false
+    },
+    {
+      "tenant_id": "demo-b",
+      "name": "Contoso Books",
+      "aws_account_id": "000000000000",
+      "region": "eu-west-3",
+      "role_arn": "arn:aws:iam::000000000000:role/rempart-ops-demo-b",
+      "external_id": "ext-demo-b",
+      "plan": "essentiel",
+      "contacts": [
+        {
+          "name": "Ops",
+          "email": "ops@demo-b.example"
+        }
+      ],
+      "monthly_budget_hours": 20.0,
+      "mandate_status": "valid",
+      "created_at": "2026-10-05T08:00:00Z",
+      "free_tier_confirmed": false
+    }
+  ],
+  "applications": [
+    {
+      "app_id": "app-shop",
+      "tenant_id": "demo-a",
+      "name": "ShopLite",
+      "criticality": "high",
+      "internet_exposed": true,
+      "data_types": [
+        "personal",
+        "payment"
+      ],
+      "environment": "staging",
+      "agent_space_id": "space-app-shop",
+      "domains": [
+        "app-shop.demo.example"
+      ],
+      "repositories": [
+        "demo/shoplite"
+      ],
+      "team": "Core",
+      "ticket_channel": "github",
+      "context": {
+        "business": "demonstration dataset"
+      },
+      "created_at": "2026-10-05T08:00:00Z"
+    },
+    {
+      "app_id": "app-book",
+      "tenant_id": "demo-b",
+      "name": "BookWorm",
+      "criticality": "medium",
+      "internet_exposed": true,
+      "data_types": [
+        "personal"
+      ],
+      "environment": "staging",
+      "agent_space_id": "space-app-book",
+      "domains": [
+        "app-book.demo.example"
+      ],
+      "repositories": [
+        "demo/bookworm"
+      ],
+      "team": "Core",
+      "ticket_channel": "github",
+      "context": {
+        "business": "demonstration dataset"
+      },
+      "created_at": "2026-10-05T08:00:00Z"
+    }
+  ],
+  "test_configs": [
+    {
+      "config_id": "cfg-app-shop-delivery",
+      "app_id": "app-shop",
+      "sa_pentest_id": "pt-app-shop-delivery",
+      "kind": "delivery",
+      "scope": {
+        "paths": [
+          "/"
+        ]
+      },
+      "risk_types": [
+        "IDOR",
+        "SQLI",
+        "BrokenAuth"
+      ],
+      "blocking_threshold": "High",
+      "schedule": null
+    },
+    {
+      "config_id": "cfg-app-shop-full",
+      "app_id": "app-shop",
+      "sa_pentest_id": "pt-app-shop-full",
+      "kind": "full",
+      "scope": {
+        "paths": [
+          "/"
+        ]
+      },
+      "risk_types": [],
+      "blocking_threshold": "Critical",
+      "schedule": "cron(0 6 1 * ? *)"
+    },
+    {
+      "config_id": "cfg-app-book-delivery",
+      "app_id": "app-book",
+      "sa_pentest_id": "pt-app-book-delivery",
+      "kind": "delivery",
+      "scope": {
+        "paths": [
+          "/"
+        ]
+      },
+      "risk_types": [
+        "IDOR",
+        "SQLI",
+        "BrokenAuth"
+      ],
+      "blocking_threshold": "High",
+      "schedule": null
+    },
+    {
+      "config_id": "cfg-app-book-full",
+      "app_id": "app-book",
+      "sa_pentest_id": "pt-app-book-full",
+      "kind": "full",
+      "scope": {
+        "paths": [
+          "/"
+        ]
+      },
+      "risk_types": [],
+      "blocking_threshold": "Critical",
+      "schedule": "cron(0 6 1 * ? *)"
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "run-app-shop-1",
+      "config_id": "cfg-app-shop-delivery",
+      "app_id": "app-shop",
+      "tenant_id": "demo-a",
+      "trigger": "cicd",
+      "commit_from": "aaa111",
+      "commit_to": "bbb222",
+      "scope_decision": "deployed_range",
+      "status": "blocked",
+      "started_at": "2026-10-06T09:00:00Z",
+      "ended_at": "2026-10-06T10:12:00Z",
+      "duration_s": 4320.0,
+      "task_hours": 1.4,
+      "cost_usd": 70.0
+    },
+    {
+      "run_id": "run-app-shop-2",
+      "config_id": "cfg-app-shop-full",
+      "app_id": "app-shop",
+      "tenant_id": "demo-a",
+      "trigger": "schedule",
+      "commit_from": "",
+      "commit_to": "",
+      "scope_decision": "full",
+      "status": "completed",
+      "started_at": "2026-10-12T06:00:00Z",
+      "ended_at": "2026-10-12T09:05:00Z",
+      "duration_s": 11100.0,
+      "task_hours": 3.1,
+      "cost_usd": 155.0
+    },
+    {
+      "run_id": "run-app-shop-3",
+      "config_id": "cfg-app-shop-delivery",
+      "app_id": "app-shop",
+      "tenant_id": "demo-a",
+      "trigger": "retest",
+      "commit_from": "ccc333",
+      "commit_to": "ddd444",
+      "scope_decision": "deployed_range",
+      "status": "completed",
+      "started_at": "2026-10-20T09:00:00Z",
+      "ended_at": "2026-10-20T09:48:00Z",
+      "duration_s": 2880.0,
+      "task_hours": 0.9,
+      "cost_usd": 45.0
+    },
+    {
+      "run_id": "run-app-book-1",
+      "config_id": "cfg-app-book-delivery",
+      "app_id": "app-book",
+      "tenant_id": "demo-b",
+      "trigger": "cicd",
+      "commit_from": "aaa111",
+      "commit_to": "bbb222",
+      "scope_decision": "deployed_range",
+      "status": "blocked",
+      "started_at": "2026-10-06T09:00:00Z",
+      "ended_at": "2026-10-06T10:12:00Z",
+      "duration_s": 4320.0,
+      "task_hours": 1.4,
+      "cost_usd": 70.0
+    },
+    {
+      "run_id": "run-app-book-2",
+      "config_id": "cfg-app-book-full",
+      "app_id": "app-book",
+      "tenant_id": "demo-b",
+      "trigger": "schedule",
+      "commit_from": "",
+      "commit_to": "",
+      "scope_decision": "full",
+      "status": "completed",
+      "started_at": "2026-10-12T06:00:00Z",
+      "ended_at": "2026-10-12T09:05:00Z",
+      "duration_s": 11100.0,
+      "task_hours": 3.1,
+      "cost_usd": 155.0
+    },
+    {
+      "run_id": "run-app-book-3",
+      "config_id": "cfg-app-book-delivery",
+      "app_id": "app-book",
+      "tenant_id": "demo-b",
+      "trigger": "retest",
+      "commit_from": "ccc333",
+      "commit_to": "ddd444",
+      "scope_decision": "deployed_range",
+      "status": "completed",
+      "started_at": "2026-10-20T09:00:00Z",
+      "ended_at": "2026-10-20T09:48:00Z",
+      "duration_s": 2880.0,
+      "task_hours": 0.9,
+      "cost_usd": 45.0
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "f-app-shop-0",
+      "app_id": "app-shop",
+      "tenant_id": "demo-a",
+      "run_id": "run-app-shop-1",
+      "fingerprint": "fp-app-shop-idor",
+      "title": "IDOR on order details",
+      "risk_type": "IDOR",
+      "severity": "Critical",
+      "confidence": "High",
+      "priority": "P1",
+      "status": "closed",
+      "due_at": "2026-10-13T10:00:00Z",
+      "ticket_url": "https://github.com/demo/app-shop/issues/10",
+      "remediation_pr_url": "https://github.com/demo/app-shop/pull/20",
+      "evidence": {
+        "description": "Demonstration finding: IDOR on order details."
+      },
+      "cvss": {
+        "score": 8.1
+      },
+      "created_at": "2026-10-06T10:00:00Z",
+      "updated_at": "2026-10-06T10:00:00Z",
+      "closed_at": "2026-10-20T09:48:00Z",
+      "closed_by_run_id": "run-app-shop-3"
+    },
+    {
+      "finding_id": "f-app-shop-1",
+      "app_id": "app-shop",
+      "tenant_id": "demo-a",
+      "run_id": "run-app-shop-1",
+      "fingerprint": "fp-app-shop-bruteforce",
+      "title": "Missing rate limit on login",
+      "risk_type": "BruteForce",
+      "severity": "Medium",
+      "confidence": "High",
+      "priority": "P1",
+      "status": "confirmed",
+      "due_at": "2026-10-14T10:00:00Z",
+      "ticket_url": "https://github.com/demo/app-shop/issues/11",
+      "remediation_pr_url": null,
+      "evidence": {
+        "description": "Demonstration finding: Missing rate limit on login."
+      },
+      "cvss": {
+        "score": 5.4
+      },
+      "created_at": "2026-10-07T10:00:00Z",
+      "updated_at": "2026-10-07T10:00:00Z",
+      "closed_at": null,
+      "closed_by_run_id": null
+    },
+    {
+      "finding_id": "f-app-shop-2",
+      "app_id": "app-shop",
+      "tenant_id": "demo-a",
+      "run_id": "run-app-shop-1",
+      "fingerprint": "fp-app-shop-infoleak",
+      "title": "Verbose stack trace in error page",
+      "risk_type": "InfoLeak",
+      "severity": "Low",
+      "confidence": "High",
+      "priority": "P3",
+      "status": "closed",
+      "due_at": "2027-01-06T10:00:00Z",
+      "ticket_url": "https://github.com/demo/app-shop/issues/12",
+      "remediation_pr_url": "https://github.com/demo/app-shop/pull/22",
+      "evidence": {
+        "description": "Demonstration finding: Verbose stack trace in error page."
+      },
+      "cvss": {
+        "score": 5.4
+      },
+      "created_at": "2026-10-08T10:00:00Z",
+      "updated_at": "2026-10-08T10:00:00Z",
+      "closed_at": "2026-10-20T09:48:00Z",
+      "closed_by_run_id": "run-app-shop-3"
+    },
+    {
+      "finding_id": "f-app-book-3",
+      "app_id": "app-book",
+      "tenant_id": "demo-b",
+      "run_id": "run-app-book-1",
+      "fingerprint": "fp-app-book-sqli",
+      "title": "SQL injection in search",
+      "risk_type": "SQLI",
+      "severity": "Critical",
+      "confidence": "High",
+      "priority": "P1",
+      "status": "in_remediation",
+      "due_at": "2026-10-16T10:00:00Z",
+      "ticket_url": "https://github.com/demo/app-book/issues/13",
+      "remediation_pr_url": "https://github.com/demo/app-book/pull/23",
+      "evidence": {
+        "description": "Demonstration finding: SQL injection in search."
+      },
+      "cvss": {
+        "score": 8.1
+      },
+      "created_at": "2026-10-09T10:00:00Z",
+      "updated_at": "2026-10-09T10:00:00Z",
+      "closed_at": null,
+      "closed_by_run_id": null
+    },
+    {
+      "finding_id": "f-app-book-4",
+      "app_id": "app-book",
+      "tenant_id": "demo-b",
+      "run_id": "run-app-book-1",
+      "fingerprint": "fp-app-book-brokenauth",
+      "title": "Admin route without access control",
+      "risk_type": "BrokenAuth",
+      "severity": "High",
+      "confidence": "Medium",
+      "priority": "P2",
+      "status": "pending_validation",
+      "due_at": "2026-11-09T10:00:00Z",
+      "ticket_url": "https://github.com/demo/app-book/issues/14",
+      "remediation_pr_url": null,
+      "evidence": {
+        "description": "Demonstration finding: Admin route without access control."
+      },
+      "cvss": {
+        "score": 5.4
+      },
+      "created_at": "2026-10-10T10:00:00Z",
+      "updated_at": "2026-10-10T10:00:00Z",
+      "closed_at": null,
+      "closed_by_run_id": null
+    },
+    {
+      "finding_id": "f-app-book-5",
+      "app_id": "app-book",
+      "tenant_id": "demo-b",
+      "run_id": "run-app-book-1",
+      "fingerprint": "fp-app-book-misconfig",
+      "title": "Session cookie without Secure flag",
+      "risk_type": "Misconfig",
+      "severity": "Medium",
+      "confidence": "Low",
+      "priority": "P3",
+      "status": "new",
+      "due_at": "2027-01-09T10:00:00Z",
+      "ticket_url": null,
+      "remediation_pr_url": null,
+      "evidence": {
+        "description": "Demonstration finding: Session cookie without Secure flag."
+      },
+      "cvss": {
+        "score": 5.4
+      },
+      "created_at": "2026-10-11T10:00:00Z",
+      "updated_at": "2026-10-11T10:00:00Z",
+      "closed_at": null,
+      "closed_by_run_id": null
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "dec-f-app-shop-0",
+      "finding_id": "f-app-shop-0",
+      "author_type": "agent",
+      "author": "triage-agent",
+      "action": "CONFIRMED",
+      "justification": "Matrice déterministe : sévérité et confiance élevées.",
+      "created_at": "2026-10-06T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-h-f-app-shop-0",
+      "finding_id": "f-app-shop-0",
+      "author_type": "human",
+      "author": "analyst@msp.example",
+      "action": "closed",
+      "justification": "Validé en file de tri.",
+      "created_at": "2026-10-06T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-f-app-shop-1",
+      "finding_id": "f-app-shop-1",
+      "author_type": "agent",
+      "author": "triage-agent",
+      "action": "CONFIRMED",
+      "justification": "Matrice déterministe : sévérité et confiance élevées.",
+      "created_at": "2026-10-07T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-h-f-app-shop-1",
+      "finding_id": "f-app-shop-1",
+      "author_type": "human",
+      "author": "analyst@msp.example",
+      "action": "confirmed",
+      "justification": "Validé en file de tri.",
+      "created_at": "2026-10-07T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-f-app-shop-2",
+      "finding_id": "f-app-shop-2",
+      "author_type": "agent",
+      "author": "triage-agent",
+      "action": "CONFIRMED",
+      "justification": "Matrice déterministe : sévérité et confiance élevées.",
+      "created_at": "2026-10-08T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-h-f-app-shop-2",
+      "finding_id": "f-app-shop-2",
+      "author_type": "human",
+      "author": "analyst@msp.example",
+      "action": "closed",
+      "justification": "Validé en file de tri.",
+      "created_at": "2026-10-08T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-f-app-book-3",
+      "finding_id": "f-app-book-3",
+      "author_type": "agent",
+      "author": "triage-agent",
+      "action": "CONFIRMED",
+      "justification": "Matrice déterministe : sévérité et confiance élevées.",
+      "created_at": "2026-10-09T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-h-f-app-book-3",
+      "finding_id": "f-app-book-3",
+      "author_type": "human",
+      "author": "analyst@msp.example",
+      "action": "in_remediation",
+      "justification": "Validé en file de tri.",
+      "created_at": "2026-10-09T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-f-app-book-4",
+      "finding_id": "f-app-book-4",
+      "author_type": "agent",
+      "author": "triage-agent",
+      "action": "CONFIRMED",
+      "justification": "Matrice déterministe : sévérité et confiance élevées.",
+      "created_at": "2026-10-10T10:00:00Z"
+    },
+    {
+      "decision_id": "dec-h-f-app-book-4",
+      "finding_id": "f-app-book-4",
+      "author_type": "human",
+      "author": "analyst@msp.example",
+      "action": "pending_validation",
+      "justification": "Validé en file de tri.",
+      "created_at": "2026-10-10T10:00:00Z"
+    }
+  ],
+  "budget": [
+    {
+      "tenant_id": "demo-a",
+      "month": "2026-10",
+      "hours_used": 5.4,
+      "thresholds_hit": [],
+      "auto_stop": false
+    },
+    {
+      "tenant_id": "demo-b",
+      "month": "2026-10",
+      "hours_used": 5.4,
+      "thresholds_hit": [],
+      "auto_stop": false
+    }
+  ],
+  "reports": [
+    {
+      "report_id": "rep-demo-a-2026-10",
+      "tenant_id": "demo-a",
+      "period": "2026-10",
+      "s3_key": "reports/demo-a/2026-10/demo.pdf",
+      "kpis": {
+        "delivery_to_result_hours": 1.2,
+        "critical_blocked_before_prod": 1.0,
+        "mean_time_to_fix_days_by_priority": {
+          "P1": 3.0
+        },
+        "sla_compliance": 1.0,
+        "coverage": 1.0,
+        "reopen_rate": 0.0,
+        "task_hours_used": 5.4,
+        "cost_usd": 270.0
+      },
+      "created_at": "2026-11-03T06:00:00Z"
+    },
+    {
+      "report_id": "rep-demo-b-2026-10",
+      "tenant_id": "demo-b",
+      "period": "2026-10",
+      "s3_key": "reports/demo-b/2026-10/demo.pdf",
+      "kpis": {
+        "delivery_to_result_hours": 1.2,
+        "critical_blocked_before_prod": 1.0,
+        "mean_time_to_fix_days_by_priority": {
+          "P1": 3.0
+        },
+        "sla_compliance": 1.0,
+        "coverage": 1.0,
+        "reopen_rate": 0.0,
+        "task_hours_used": 5.4,
+        "cost_usd": 270.0
+      },
+      "created_at": "2026-11-03T06:00:00Z"
+    }
+  ]
+}

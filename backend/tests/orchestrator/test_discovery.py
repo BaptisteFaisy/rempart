@@ -20,6 +20,7 @@ def _seed(store):
             contacts=[],
             monthly_budget_hours=10.0,
             mandate_status="valid",
+            free_tier_confirmed=True,
             created_at="2026-11-01T00:00:00Z",
         )
     )

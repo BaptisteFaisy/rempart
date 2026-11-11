@@ -123,7 +123,15 @@ tenant-B resources (acceptance scenario R9).
 **5. Task-hours cost money by the second.** Fix: a monthly task-hour budget per
 customer, alerts at 50/80/100 %, automatic `StopPentestJob` at 100 %, and the
 judges' demo account limited to one on-demand test per day on the minimal
-scope.
+scope. We then made "free by default" a **coded** property rather than a
+promise: `REMPART_FREE_TIER_ONLY=1` makes both the orchestrator's budget gate
+and `POST /v1/applications/{id}/runs` refuse any real test until that tenant's
+free-tier eligibility is explicitly confirmed (reason `free_tier_not_confirmed`,
+HTTP 402, audited), and `REMPART_MAX_TASK_HOURS_PER_TEST=5` stops a single test
+running past 5 task-hours even when the monthly budget is wide. The judge tour
+itself runs on a frozen dataset (`scripts/seed_demo.py` →
+`demo/seed/demo-dataset.json`), so it costs nothing. Procedure:
+[`docs/free-tier-runbook.md`](free-tier-runbook.md).
 
 ---
 

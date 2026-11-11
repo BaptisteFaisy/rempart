@@ -69,6 +69,7 @@ def _seed_tenant(tenant_id: str, name: str) -> Tenant:
         contacts=[{"name": "Ops", "email": "ops@example.com"}],
         monthly_budget_hours=40.0,
         mandate_status="valid",
+            free_tier_confirmed=True,
         created_at="2026-11-01T00:00:00Z",
     )
 

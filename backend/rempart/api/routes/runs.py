@@ -26,11 +26,21 @@ def _load_run_or_404(ctx: ApiContext, run_id: str) -> tuple[Run | None, Response
     return load_or_404(get_store(ctx).get_run, run_id, "Run")
 
 def _validate_tenant_gates(ctx: ApiContext, app: Application) -> Response | None:
-    """Reject the run when the mandate is invalid or the budget is exhausted."""
+    """Reject the run when the mandate is invalid, the free tier is not
+    confirmed, or the budget is exhausted."""
     store = get_store(ctx)
     tenant = store.get_tenant(app.tenant_id)
     if not tenant or tenant.mandate_status != "valid":
         return error_response("Mandat de test non valide ou expiré", 403)
+
+    settings = ctx.settings
+    if settings and settings.free_tier_only and not tenant.free_tier_confirmed:
+        # Garde-fou anti-facture : 50 $/heure-tâche hors free tier.
+        return error_response(
+            "Éligibilité au free tier AWS Continuum non confirmée : "
+            "aucun test réel ne peut partir",
+            402,
+        )
 
     state = store.get_budget(app.tenant_id, current_month())
     verdict = budget_verdict(ctx, state, tenant)

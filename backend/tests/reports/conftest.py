@@ -24,6 +24,7 @@ def make_tenant(tenant_id: str = "t-1", *, budget_hours: float = 40.0) -> Tenant
         contacts=[{"email": "cto@example.com"}],
         monthly_budget_hours=budget_hours,
         mandate_status="valid",
+            free_tier_confirmed=True,
         created_at="2026-01-01T00:00:00Z",
     )
 

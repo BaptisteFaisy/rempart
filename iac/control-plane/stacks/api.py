@@ -47,6 +47,10 @@ class ApiStack(cdk.Stack):
                 "REMPART_TABLE_PREFIX": table_prefix,
                 "REMPART_REGION": self.region,
                 "REMPART_HOURLY_RATE": str(hourly_rate),
+                # Garde-fous anti-facture : aucun test reel sans eligibilite
+                # free tier confirmee, et un plafond d'heures-taches par test.
+                "REMPART_FREE_TIER_ONLY": "1",
+                "REMPART_MAX_TASK_HOURS_PER_TEST": "5",
             },
             timeout_seconds=30,
             memory_size=1024,

@@ -190,6 +190,7 @@ Submission deadline: **Friday 11 December 2026, 12:00 PT**.
 - [Test instructions for judges](docs/judging-test-instructions.md) — 10-minute guided tour, demo credentials, fallback path
 - [Video script](docs/video-script.md) — 3 minutes, timed shot by shot (recording is done by the team)
 - [AWS Continuum API verification](docs/api-verification.md) — action-by-action check against the official API reference, and the pricing trap we avoided
+- [Free-tier runbook](docs/free-tier-runbook.md) — the four coded locks that make a paid test impossible by default, and the zero-cost demo path
 
 ---
 

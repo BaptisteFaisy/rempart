@@ -50,6 +50,9 @@ class Tenant(_ItemMixin):
     monthly_budget_hours: float
     mandate_status: str
     created_at: str
+    # Éligibilité au free tier AWS Continuum confirmée dans la console : tant
+    # que ce n'est pas vrai, le garde-fou refuse de lancer un test réel.
+    free_tier_confirmed: bool = False
 
 
 @dataclass
