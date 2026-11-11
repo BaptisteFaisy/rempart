@@ -117,13 +117,13 @@ def test_synth_orchestrator_stack():
     for expected in ("RempartPentestLifecycle", "RempartCicdIntake", "RempartRetestClose"):
         assert expected in names
 
-    # The nine handlers of the contract, all served by lambda_handlers.
+    # Les neuf handlers du contrat + le balayeur d'échéances (EF-COR-06).
     lambdas = template.find_resources("AWS::Lambda::Function")
-    assert len(lambdas) == 9
+    assert len(lambdas) == 10
     handlers = {fn["Properties"]["Handler"] for fn in lambdas.values()}
     prefix = "rempart.orchestrator.lambda_handlers."
-    assert all(h.startswith(prefix) for h in handlers), handlers
-    assert {h[len(prefix) :] for h in handlers} == {
+    task_handlers = {h for h in handlers if h.startswith(prefix)}
+    assert {h[len(prefix) :] for h in task_handlers} == {
         "budget_gate",
         "start_run",
         "poll_run",
@@ -134,10 +134,13 @@ def test_synth_orchestrator_stack():
         "close_or_reopen",
         "discover_runs",
     }
+    assert "rempart.orchestrator.reminders.lambda_handler" in handlers
 
-    # EventBridge rules: 5-minute discovery + monthly schedule starting machine A.
+    # EventBridge : découverte (5 min), test mensuel, relances d'échéance (1 h).
     rules = template.find_resources("AWS::Events::Rule")
-    assert len(rules) >= 2
+    assert len(rules) >= 3
+    schedules = " ".join(str(r["Properties"].get("ScheduleExpression", "")) for r in rules.values())
+    assert "rate(1 hour)" in schedules, "le balayeur EF-COR-06 n'est pas planifié"
 
 
 def test_synth_portal_stack():

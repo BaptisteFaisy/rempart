@@ -97,6 +97,8 @@ class OrchestratorStack(cdk.Stack):
         }
         # Alias explicite : la decouverte est planifiee toutes les 5 min.
         self.discovery_lambda = self.lambdas["discover_runs"]
+        # EF-COR-06 : balayeur des echeances, planifie toutes les heures.
+        self.reminders_lambda = self._create_reminders_lambda(common_env, tables)
         self.pentest_lifecycle = self._build_pentest_lifecycle()
         self.cicd_intake = self._build_cicd_intake()
         self.retest_close = self._build_retest_close()
@@ -285,6 +287,36 @@ class OrchestratorStack(cdk.Stack):
     # ------------------------------------------------------------------ #
     # Scheduling
     # ------------------------------------------------------------------ #
+    def _create_reminders_lambda(
+        self,
+        env: dict[str, str],
+        tables: dict[str, ddb.ITable],
+    ) -> _lambda.Function:
+        """Balayeur EF-COR-06 : relance avant/après échéance, puis escalade.
+
+        Il envoie les e-mails en processus via ``notifications.handler``, donc
+        il porte la permission ``ses:SendEmail`` (restreinte à l'adresse
+        noreply du domaine, comme la stack de notifications).
+        """
+        fn = create_python_lambda(
+            self,
+            "LambdaReminders",
+            handler="rempart.orchestrator.reminders.lambda_handler",
+            environment=env,
+            layers=self._layers(),
+            timeout_seconds=120,
+            memory_size=512,
+        )
+        for table in tables.values():
+            table.grant_read_write_data(fn)
+        fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["ses:SendEmail", "ses:SendRawEmail"],
+                resources=["*"],
+            )
+        )
+        return fn
+
     def _setup_schedules(self) -> None:
         """Poll discovered CI/CD runs every 5 min; start machine A monthly."""
         events.Rule(
@@ -292,6 +324,14 @@ class OrchestratorStack(cdk.Stack):
             "DiscoveryEvery5MinRule",
             schedule=events.Schedule.rate(cdk.Duration.minutes(DISCOVERY_INTERVAL_MINUTES)),
             targets=[targets.LambdaFunction(self.discovery_lambda)],
+        )
+        # EF-COR-06 : une fois par heure. L'anti-spam vit dans le code
+        # (journal d'audit), donc un balayage fréquent ne harcèle personne.
+        events.Rule(
+            self,
+            "DeadlineRemindersHourlyRule",
+            schedule=events.Schedule.rate(cdk.Duration.hours(1)),
+            targets=[targets.LambdaFunction(self.reminders_lambda)],
         )
         events.Rule(
             self,

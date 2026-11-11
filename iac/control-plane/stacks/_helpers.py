@@ -87,7 +87,9 @@ def create_encrypted_table(
         partition_key=partition_key,
         sort_key=sort_key,
         billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
-        point_in_time_recovery=True,
+        point_in_time_recovery_specification=ddb.PointInTimeRecoverySpecification(
+            point_in_time_recovery_enabled=True
+        ),
         time_to_live_attribute=time_to_live_attribute,
         removal_policy=cdk.RemovalPolicy.RETAIN,
         encryption=encryption,

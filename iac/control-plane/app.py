@@ -90,11 +90,11 @@ def build_observability(
 
 def wire_dependencies(core: dict[str, Any], observability: ObservabilityStack) -> None:
     """Ordre de déploiement entre stacks."""
-    core["api"].add_dependency(core["storage"])
-    core["api"].add_dependency(core["identity"])
-    core["orchestrator"].add_dependency(core["storage"])
+    core["api"].add_stack_dependency(core["storage"])
+    core["api"].add_stack_dependency(core["identity"])
+    core["orchestrator"].add_stack_dependency(core["storage"])
     for stack in (core["api"], core["orchestrator"], core["storage"]):
-        observability.add_dependency(stack)
+        observability.add_stack_dependency(stack)
 
 
 def build_app() -> cdk.App:
