@@ -1,0 +1,57 @@
+name: ci-iac (synth CDK + template client)
+
+# Vérifie que l'infrastructure en code synthétise (CDK) et que le template
+# CloudFormation du compte client respecte la politique IAM de l'annexe A
+# du cahier des charges.
+
+on:
+  pull_request:
+    paths:
+      - "iac/**"
+      - "backend/tests/iac/**"
+      - ".github/workflows/ci-iac.yml"
+  push:
+    branches: [main]
+    paths:
+      - "iac/**"
+      - "backend/tests/iac/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-iac-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  iac:
+    name: iac (cdk synth + template)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      JSII_RUNTIME_PACKAGE_CACHE_ROOT: /tmp/jsii-cache
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ci.txt
+
+      - name: Installer les dépendances
+        run: pip install -r backend/requirements-ci.txt
+
+      - name: Tests IaC (synth + template client)
+        working-directory: backend
+        run: python -m pytest tests/iac -q
+
+      - name: Lint IaC
+        working-directory: backend
+        run: ruff check ../iac tests/iac

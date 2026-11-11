@@ -1,0 +1,55 @@
+name: ci-backend (pytest + ruff)
+
+# Tests et lint du backend Rempart (rempart.common, api, orchestrator,
+# triage, reports). Budget CI : chaque job ≤ 5 minutes (règle user
+# 2026-10-24). Les tests n'appellent jamais AWS : tout passe par les fakes.
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-backend.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-backend-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (pytest + ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      JSII_RUNTIME_PACKAGE_CACHE_ROOT: /tmp/jsii-cache
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ci.txt
+
+      - name: Installer les dépendances
+        run: pip install -r backend/requirements-ci.txt
+
+      - name: Lint (ruff)
+        working-directory: backend
+        run: ruff check rempart tests
+
+      - name: Tests (pytest)
+        working-directory: backend
+        run: python -m pytest tests -q

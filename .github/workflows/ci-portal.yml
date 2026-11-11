@@ -1,0 +1,53 @@
+name: ci-portal (build + vitest)
+
+# Build du portail React/TypeScript et tests vitest. Le cache npm garde la
+# CI sous 5 minutes (règle user 2026-10-24).
+
+on:
+  pull_request:
+    paths:
+      - "portal/**"
+      - ".github/workflows/ci-portal.yml"
+  push:
+    branches: [main]
+    paths:
+      - "portal/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-portal-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portal:
+    name: portal (build + vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Tests (vitest)
+        run: npx vitest run
+
+      - name: Build (tsc + vite)
+        run: npm run build

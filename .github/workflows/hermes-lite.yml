@@ -26,7 +26,7 @@ concurrency:
 env:
   GH_TOKEN: ${{ secrets.HERMES_LITE_TOKEN || github.token }}
   # Contexts de statut requis avant merge, séparés par des virgules.
-  HERMES_REQUIRED_CHECKS: 'ci-budget'
+  HERMES_REQUIRED_CHECKS: 'ci-budget,backend,portal,demo'
   # Alignés sur .mergify.yml (squash + mise à jour par merge), lus par gate.py.
   MERGE_METHOD: squash
   UPDATE_METHOD: merge

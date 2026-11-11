@@ -1,9 +1,19 @@
-# File de merge Mergify — socle CI
+# File de merge Mergify — socle CI (budget 5 min) + checks réels Rempart.
+#
+# Les `queue_conditions` exigent les 4 checks de la CI du dépôt :
+#   - ci-budget : garde-fou « chaque job ≤ 5 minutes » (règle user 2026-10-24)
+#   - backend   : pytest + ruff du backend (rempart.common/api/orchestrator/triage/reports)
+#   - portal    : build + vitest du portail React
+#   - demo      : pytest des applications de démonstration
+# Le check `iac` (synth CDK + template client) est ajouté quand le dépôt
+# gagne des stacks CDK : il est déjà dans la CI, voir .github/workflows/ci-iac.yml.
 queue_rules:
   - name: default
     queue_conditions:
-      # Budget CI 5 min (règle user 2026-10-24) : le garde-fou du socle.
       - check-success = ci-budget
+      - check-success = backend
+      - check-success = portal
+      - check-success = demo
       - -conflict
       - -draft
       - base = main
@@ -12,7 +22,10 @@ queue_rules:
       max: 3
     batch_max_wait_time: "30 seconds"
     max_checks_retries: 1
+    # Squash, pas rebase (décision user 2026-11-08) : une PR = un commit
+    # sur main, et une PR ayant fusionné main en elle reste fusionnable.
     merge_method: squash
+    # Mise à jour par merge de main : jamais de réécriture (force-push).
     update_method: merge
     commit_message_format:
       title: pr-title
@@ -31,6 +44,8 @@ priority_rules:
 merge_queue:
   max_parallel_checks: 4
 
+# File automatique : toute PR prête entre seule dans la file, sans geste
+# manuel. Le label `hold` est la sortie de secours.
 pull_request_rules:
   - name: file automatique des PR prêtes
     conditions:

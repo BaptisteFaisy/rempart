@@ -1,0 +1,47 @@
+name: ci-demo (apps de démonstration)
+
+# Tests des applications de démonstration clients (ShopLite, BookWorm) :
+# comportement vulnérable ET comportement corrigé selon les flags d'env.
+
+on:
+  pull_request:
+    paths:
+      - "demo/**"
+      - ".github/workflows/ci-demo.yml"
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-demo-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  demo:
+    name: demo (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ci.txt
+
+      - name: Installer les dépendances
+        run: pip install -r backend/requirements-ci.txt
+
+      - name: Tests des apps de démonstration
+        run: python -m pytest demo -q
