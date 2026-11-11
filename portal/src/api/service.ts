@@ -1,4 +1,4 @@
-import { apiRequest, showApiError } from './client';
+import { apiRequest } from './client';
 import {
   DEMO_COLLECTIONS,
   DEMO_ITEM_COUNT,
@@ -242,9 +242,3 @@ installOfflineDemoBanner();
  * frozen dataset only.
  */
 export const portalApi: PortalApi = USE_MOCKS ? offlineApi : liveApi;
-
-/** Report a failure from a page that catches it, so nothing fails silently. */
-export function reportApiFailure(context: string, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
-  showApiError(`${context}: ${message}`);
-}

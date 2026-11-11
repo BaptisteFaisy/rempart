@@ -127,11 +127,20 @@ async function parseError(res: Response): Promise<unknown> {
 
 export async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const url = buildUrl(endpoint, options.params);
-  const res = await fetch(url, {
-    method: options.method || 'GET',
-    headers: buildHeaders(getSession()),
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: options.method || 'GET',
+      headers: buildHeaders(getSession()),
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined
+    });
+  } catch (cause) {
+    // Unreachable backend: say so loudly instead of inventing rows.
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const message = `${endpoint}: API unreachable (${detail}). Is scripts/serve_local.py running?`;
+    showApiError(message);
+    throw new ApiError(0, message, cause);
+  }
 
   if (!res.ok) {
     const errBody = await parseError(res);
