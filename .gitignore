@@ -17,3 +17,6 @@ cdk.out/
 # Misc
 .DS_Store
 *.pdf
+
+# CDK
+.cdk-out/
