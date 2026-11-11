@@ -1,0 +1,92 @@
+name: deploy-pages (portail public)
+
+# Publie le portail sur GitHub Pages : https://baptistefaisy.github.io/rempart/
+#
+# Le site est servi en MODE DÉMO HORS LIGNE (VITE_USE_MOCKS=1) : les données
+# viennent du jeu figé `demo/seed/demo-dataset.json`, le même que celui servi
+# par `scripts/serve_local.py`. Aucun backend, aucun compte AWS, aucun coût —
+# et surtout aucune donnée client réelle exposée sur une URL publique.
+#
+# Une bannière « OFFLINE DEMO MODE » est affichée par le portail pour qu'un
+# visiteur ne croie jamais voir des données réelles.
+#
+# Budget CI : 5 minutes (règle user 2026-10-24).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "portal/**"
+      - "demo/seed/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build-portal
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Tests (vitest)
+        run: npx vitest run
+
+      - name: Build statique (mode démo hors ligne, base /rempart/)
+        env:
+          VITE_USE_MOCKS: "1"
+          VITE_BASE_PATH: "/rempart/"
+        run: npm run build
+
+      - name: Copie index.html -> 404.html (routage SPA sur Pages)
+        # GitHub Pages ne sait pas servir une SPA : un rafraîchissement sur
+        # /rempart/triage renverrait 404. Servir le même index.html en 404
+        # laisse le routeur React prendre la main.
+        run: cp dist/index.html dist/404.html
+
+      - name: Préparer l'artefact Pages
+        uses: actions/configure-pages@v5
+
+      - name: Téléverser l'artefact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: portal/dist
+
+  deploy:
+    name: deploy-to-pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publier sur GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
