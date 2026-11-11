@@ -104,18 +104,38 @@ def test_synth_api_stack():
 
 
 def test_synth_orchestrator_stack():
-    """Verify orchestrator stack contains Step Functions StateMachine and Lambdas."""
+    """Verify the three machines of CONTRACT-PHASE0 section 3 and their Lambdas."""
     app = build_app()
     app.synth()
     stack = app.node.find_child("RempartOrchestratorStack")
     template = assertions.Template.from_stack(stack)
 
-    template.resource_count_is("AWS::StepFunctions::StateMachine", 1)
-    # 6 task lambdas + 1 discovery lambda = 7
-    lambdas = template.find_resources("AWS::Lambda::Function")
-    assert len(lambdas) >= 7
+    # Three short, bounded machines: lifecycle (A), CI/CD intake (B), retest (C).
+    template.resource_count_is("AWS::StepFunctions::StateMachine", 3)
+    machines = template.find_resources("AWS::StepFunctions::StateMachine")
+    names = [m["Properties"].get("StateMachineName") for m in machines.values()]
+    for expected in ("RempartPentestLifecycle", "RempartCicdIntake", "RempartRetestClose"):
+        assert expected in names
 
-    # EventBridge rules: 5-minute discovery + monthly schedule
+    # The nine handlers of the contract, all served by lambda_handlers.
+    lambdas = template.find_resources("AWS::Lambda::Function")
+    assert len(lambdas) == 9
+    handlers = {fn["Properties"]["Handler"] for fn in lambdas.values()}
+    prefix = "rempart.orchestrator.lambda_handlers."
+    assert all(h.startswith(prefix) for h in handlers), handlers
+    assert {h[len(prefix) :] for h in handlers} == {
+        "budget_gate",
+        "start_run",
+        "poll_run",
+        "collect_findings",
+        "dispatch_triage",
+        "create_tickets",
+        "request_remediation",
+        "close_or_reopen",
+        "discover_runs",
+    }
+
+    # EventBridge rules: 5-minute discovery + monthly schedule starting machine A.
     rules = template.find_resources("AWS::Events::Rule")
     assert len(rules) >= 2
 

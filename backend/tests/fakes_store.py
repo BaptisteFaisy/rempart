@@ -14,6 +14,7 @@ from rempart.common.models import (
     Tenant,
     TestConfig,
 )
+from rempart.common.store import audit_in_range
 from rempart.common.timeutil import iso, utcnow
 
 
@@ -211,6 +212,10 @@ class FakeStore:
         self,
         object_type: str | None = None,
         object_id: str | None = None,
+        actor: str | None = None,
+        action: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
         limit: int = 100,
     ) -> list[AuditEvent]:
         res = list(self.audits)
@@ -218,4 +223,10 @@ class FakeStore:
             res = [e for e in res if e.object_type == object_type]
         if object_id:
             res = [e for e in res if e.object_id == object_id]
+        if actor:
+            res = [e for e in res if e.actor == actor]
+        if action:
+            res = [e for e in res if e.action == action]
+        if since or until:
+            res = [e for e in res if audit_in_range(e.created_at, since, until)]
         return res[:limit]

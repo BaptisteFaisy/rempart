@@ -15,7 +15,7 @@ from .models import (
     Tenant,
     TestConfig,
 )
-from .timeutil import iso, utcnow
+from .timeutil import iso, parse_iso, utcnow
 
 
 def _to_ddb(val: Any) -> Any:
@@ -36,6 +36,21 @@ def _from_ddb(val: Any) -> Any:
     if isinstance(val, list):
         return [_from_ddb(v) for v in val]
     return val
+
+
+def audit_in_range(created_at: str, since: str | None, until: str | None) -> bool:
+    """Return True when ``created_at`` falls inside the inclusive [since, until] window.
+
+    Shared by ``Store`` and ``FakeStore`` so both implementations filter the
+    audit journal exactly the same way (EF-ADM-02).
+    """
+    if not since and not until:
+        return True
+    try:
+        ts = parse_iso(created_at)
+        return not ((since and ts < parse_iso(since)) or (until and ts > parse_iso(until)))
+    except ValueError:
+        return False
 
 
 class Store:
@@ -221,6 +236,10 @@ class Store:
         self,
         object_type: str | None = None,
         object_id: str | None = None,
+        actor: str | None = None,
+        action: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
         limit: int = 100,
     ) -> list[AuditEvent]:
         res = self._table("audit").scan()
@@ -229,4 +248,10 @@ class Store:
             items = [it for it in items if it.get("object_type") == object_type]
         if object_id:
             items = [it for it in items if it.get("object_id") == object_id]
+        if actor:
+            items = [it for it in items if it.get("actor") == actor]
+        if action:
+            items = [it for it in items if it.get("action") == action]
+        if since or until:
+            items = [it for it in items if audit_in_range(it.get("created_at", ""), since, until)]
         return [AuditEvent.from_item(_from_ddb(it)) for it in items[:limit]]

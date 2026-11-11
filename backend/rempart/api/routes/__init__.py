@@ -4,6 +4,7 @@ from rempart.api.router import Router
 
 from . import (
     applications,
+    audit,
     budget,
     events,
     findings,
@@ -24,6 +25,7 @@ _ROUTE_MODULES = (
     kpis,
     reports,
     budget,
+    audit,
 )
 
 

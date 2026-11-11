@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "VITE_API_URL=http://127.0.0.1:8000 VITE_DEMO_ROLE=platform_admin VITE_DEMO_TENANT=demo-a vite",
+    "dev:offline": "VITE_USE_MOCKS=1 vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run"

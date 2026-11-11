@@ -56,6 +56,17 @@ def create_encrypted_table(
     )
 
 
+def handler_reference(module: str, function: str) -> str:
+    """Render the ``Handler`` value of a Lambda function (``module.function``)."""
+    return f"{module}.{function}"
+
+
+def split_handler(handler: str) -> tuple[str, str]:
+    """Split a Lambda ``Handler`` value into ``(module, function)``."""
+    module, _, function = handler.rpartition(".")
+    return module, function
+
+
 def create_python_lambda(
     scope: Construct,
     id_: str,

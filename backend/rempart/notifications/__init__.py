@@ -1,0 +1,21 @@
+"""Notifications SES — EF-NOT-01 (quatre kinds) et EF-NOT-02 (digest)."""
+
+from .kinds import (
+    ALL_KINDS,
+    BUDGET_THRESHOLD,
+    CRITICAL_FINDING_CONFIRMED,
+    DEADLINE_OVERDUE,
+    DELIVERY_BLOCKED,
+    EF_NOT_01_KINDS,
+    WEEKLY_DIGEST,
+)
+
+__all__ = [
+    "ALL_KINDS",
+    "BUDGET_THRESHOLD",
+    "CRITICAL_FINDING_CONFIRMED",
+    "DEADLINE_OVERDUE",
+    "DELIVERY_BLOCKED",
+    "EF_NOT_01_KINDS",
+    "WEEKLY_DIGEST",
+]
