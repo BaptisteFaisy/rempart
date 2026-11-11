@@ -132,6 +132,16 @@ def make_finding(
 
 def _seed_primary(store: FakeStore) -> None:
     """Seed the reference dataset used by the report tests."""
+    _seed_primary_entities(store)
+    _seed_primary_runs_a(store)
+    _seed_primary_runs_b(store)
+    _seed_primary_runs_outside(store)
+    _seed_primary_findings_a(store)
+    _seed_primary_findings_b(store)
+
+
+def _seed_primary_entities(store: FakeStore) -> None:
+    """Seed the tenant and its two applications."""
     store.save_tenant(make_tenant("t-1", budget_hours=40.0))
     store.save_application(make_app("app-a", "t-1", name="ShopLite", environment="staging"))
     store.save_application(
@@ -145,6 +155,9 @@ def _seed_primary(store: FakeStore) -> None:
         )
     )
 
+
+def _seed_primary_runs_a(store: FakeStore) -> None:
+    """Seed the first two runs of the period."""
     store.save_run(
         make_run(
             "run-1",
@@ -171,6 +184,10 @@ def _seed_primary(store: FakeStore) -> None:
             cost_usd=100.0,
         )
     )
+
+
+def _seed_primary_runs_b(store: FakeStore) -> None:
+    """Seed the last two runs of the period."""
     store.save_run(
         make_run(
             "run-3",
@@ -197,7 +214,10 @@ def _seed_primary(store: FakeStore) -> None:
             cost_usd=50.0,
         )
     )
-    # Outside the period: must never be counted.
+
+
+def _seed_primary_runs_outside(store: FakeStore) -> None:
+    """Seed a run outside the period (never counted)."""
     store.save_run(
         make_run(
             "run-5",
@@ -212,6 +232,9 @@ def _seed_primary(store: FakeStore) -> None:
         )
     )
 
+
+def _seed_primary_findings_a(store: FakeStore) -> None:
+    """Seed the first pair of findings."""
     store.save_finding(
         make_finding(
             "f-1",
@@ -239,6 +262,10 @@ def _seed_primary(store: FakeStore) -> None:
             title="SQL injection on search",
         )
     )
+
+
+def _seed_primary_findings_b(store: FakeStore) -> None:
+    """Seed the remaining findings."""
     store.save_finding(
         make_finding(
             "f-3",

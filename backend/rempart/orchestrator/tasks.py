@@ -1,0 +1,434 @@
+"""Step Functions task functions for the Rempart orchestrator (chapter 11.4).
+
+Each task takes a ``payload`` dict (the Step Functions state) and a ``Deps``
+bundle, and returns the next state dict. Tasks are pure with respect to AWS:
+every AWS call goes through the injected ``SecurityAgentClient`` and every
+write goes through the injected ``Store``, so the whole workflow is testable
+without AWS.
+"""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+from rempart.common.budget import check_budget, consume, estimate_cost
+from rempart.common.config import Settings
+from rempart.common.fingerprint import fingerprint as make_fingerprint
+from rempart.common.models import (
+    Application,
+    Finding,
+    Run,
+    Tenant,
+    TestConfig,
+)
+from rempart.common.priority import compute_priority, due_date
+from rempart.common.timeutil import iso, parse_iso, utcnow
+
+from .triage_dispatch import apply_proposals, load_findings, run_proposals
+
+SENSITIVE_DATA_TYPES = ("personal", "payment", "health")
+
+
+@dataclass
+class Deps:
+    """Dependencies injected in every task (store, AWS client, settings)."""
+
+    store: Any
+    sa: Any
+    settings: Settings = None  # type: ignore[assignment]
+    github: Any = None
+    model_client: Any = None
+
+    def __post_init__(self) -> None:
+        if self.settings is None:
+            self.settings = Settings()
+
+
+def _tenant_of(deps: Deps, tenant_id: str) -> Tenant | None:
+    return deps.store.get_tenant(tenant_id)
+
+
+def _app_of(deps: Deps, app_id: str) -> Application | None:
+    return deps.store.get_application(app_id)
+
+
+def _month_now() -> str:
+    return utcnow().strftime("%Y-%m")
+
+
+def _sensitive(app: Application) -> bool:
+    return any(dt in SENSITIVE_DATA_TYPES for dt in (app.data_types or []))
+
+
+def _exposed_critical(app: Application) -> bool:
+    return bool(app.internet_exposed) and app.criticality == "high"
+
+
+# --------------------------------------------------------------------------- #
+# 1. Budget gate (R8, R12)
+# --------------------------------------------------------------------------- #
+def budget_gate(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Refuse to start a test without a valid mandate or with an exhausted budget."""
+    tenant_id = payload["tenant_id"]
+    tenant = _tenant_of(deps, tenant_id)
+    if tenant is None:
+        return {**payload, "allowed": False, "reason": "unknown_tenant"}
+
+    if tenant.mandate_status != "valid":
+        deps.store.append_audit(
+            "orchestrator", "run.refused_mandate", "tenant", tenant_id, "denied"
+        )
+        return {**payload, "allowed": False, "reason": "mandate_invalid"}
+
+    state = deps.store.get_budget(tenant_id, _month_now())
+    verdict = check_budget(state, tenant.monthly_budget_hours, deps.settings.hourly_rate)
+    if not verdict.allowed:
+        deps.store.append_audit(
+            "orchestrator", "run.refused_budget", "tenant", tenant_id, "denied"
+        )
+        return {
+            **payload,
+            "allowed": False,
+            "reason": "budget_exceeded",
+            "budget_pct": verdict.pct,
+        }
+    return {**payload, "allowed": True, "budget_pct": verdict.pct}
+
+
+# --------------------------------------------------------------------------- #
+# 2. Start run
+# --------------------------------------------------------------------------- #
+def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Start the Security Agent pentest job and record the run."""
+    app = _app_of(deps, payload["app_id"])
+    if app is None:
+        return {**payload, "error": "unknown_application"}
+
+    resp = deps.sa.start_pentest_job(payload["pentest_id"], **{})
+    job_id = resp.get("jobId") or resp.get("job_id") or f"job-{uuid.uuid4().hex[:8]}"
+    run = Run(
+        run_id=job_id,
+        config_id=payload.get("config_id", ""),
+        app_id=app.app_id,
+        tenant_id=app.tenant_id,
+        trigger=payload.get("trigger", "manual"),
+        commit_from=payload.get("commit_from", ""),
+        commit_to=payload.get("commit_to", ""),
+        scope_decision=payload.get("scope_decision", "full"),
+        status="running",
+        started_at=iso(utcnow()),
+        ended_at=None,
+        duration_s=None,
+        task_hours=None,
+        cost_usd=None,
+    )
+    deps.store.save_run(run)
+    return {**payload, "run_id": job_id}
+
+
+# --------------------------------------------------------------------------- #
+# 3. Poll run (budget auto-stop, R8)
+# --------------------------------------------------------------------------- #
+def poll_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Refresh the run status, consume task hours, stop the job on budget overrun."""
+    run = deps.store.get_run(payload["run_id"])
+    if run is None:
+        return {**payload, "error": "unknown_run"}
+
+    jobs = deps.sa.batch_get_pentest_jobs([run.run_id])
+    job = jobs[0] if jobs else {}
+    status = str(job.get("status", run.status)).lower()
+    task_hours = float(job.get("taskHours") or job.get("task_hours") or 0.0)
+
+    tenant = _tenant_of(deps, run.tenant_id)
+    month = _month_now()
+    state = deps.store.get_budget(run.tenant_id, month)
+    new_state, verdict = consume(state, task_hours, tenant.monthly_budget_hours)
+    deps.store.save_budget(new_state)
+
+    stopped = False
+    if verdict.auto_stop and status not in ("completed", "failed", "stopped"):
+        deps.sa.stop_pentest_job(run.run_id)
+        status = "stopped"
+        stopped = True
+        deps.store.append_audit(
+            "orchestrator", "run.auto_stopped", "run", run.run_id, "budget"
+        )
+
+    ended_at = iso(utcnow()) if status in ("completed", "failed", "stopped") else None
+    duration = None
+    if ended_at and run.started_at:
+        duration = (parse_iso(ended_at) - parse_iso(run.started_at)).total_seconds()
+
+    run.status = status
+    run.task_hours = task_hours
+    run.cost_usd = estimate_cost(task_hours, deps.settings.hourly_rate)
+    run.ended_at = ended_at
+    run.duration_s = duration
+    deps.store.save_run(run)
+
+    return {
+        **payload,
+        "run_status": status,
+        "task_hours": task_hours,
+        "budget_pct": verdict.pct,
+        "auto_stopped": stopped,
+        "done": status in ("completed", "failed", "stopped"),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 4. Collect findings (dedup, regression, priority)
+# --------------------------------------------------------------------------- #
+def _finding_from_sa(raw: dict[str, Any], app: Application, run_id: str) -> Finding:
+    severity = str(raw.get("severity", "Medium"))
+    confidence = str(raw.get("confidence", "Medium"))
+    risk_type = str(raw.get("riskType") or raw.get("risk_type") or "Unknown")
+    entry_point = str(raw.get("entryPoint") or raw.get("entry_point") or "")
+    parameter = raw.get("parameter")
+
+    result = compute_priority(
+        severity,
+        confidence,
+        exposed_critical=_exposed_critical(app),
+        sensitive_data=_sensitive(app),
+    )
+    created = utcnow()
+    deadline = due_date(result.priority, created)
+    return Finding(
+        finding_id=str(raw.get("findingId") or raw.get("id") or f"f-{uuid.uuid4().hex[:8]}"),
+        app_id=app.app_id,
+        tenant_id=app.tenant_id,
+        run_id=run_id,
+        fingerprint=make_fingerprint(app.app_id, risk_type, entry_point, parameter),
+        title=str(raw.get("title", "Untitled finding")),
+        risk_type=risk_type,
+        severity=severity,
+        confidence=confidence,
+        priority=result.priority,
+        status="new",
+        due_at=iso(deadline) if deadline else None,
+        ticket_url=None,
+        remediation_pr_url=None,
+        evidence={"description": raw.get("description", "")},
+        cvss=raw.get("cvss") or {},
+        created_at=iso(created),
+        updated_at=iso(created),
+        closed_at=None,
+        closed_by_run_id=None,
+    )
+
+
+def collect_findings(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Fetch findings, skip duplicates, flag regressions, compute priority."""
+    app = _app_of(deps, payload["app_id"])
+    if app is None:
+        return {**payload, "error": "unknown_application"}
+
+    raws = deps.sa.list_findings(payload["run_id"])
+    created: list[Finding] = []
+    duplicates = 0
+    regressions = 0
+
+    for raw in raws:
+        finding = _finding_from_sa(raw, app, payload["run_id"])
+        existing = deps.store.find_by_fingerprint(app.app_id, finding.fingerprint)
+        if existing is not None:
+            if existing.status == "closed":
+                existing.status = "reopened"
+                existing.updated_at = iso(utcnow())
+                existing.closed_at = None
+                deps.store.save_finding(existing)
+                regressions += 1
+            else:
+                duplicates += 1
+            continue
+        deps.store.save_finding(finding)
+        created.append(finding)
+
+    return {
+        **payload,
+        "findings_created": [f.finding_id for f in created],
+        "duplicates_skipped": duplicates,
+        "regressions": regressions,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 5. Dispatch triage (guardrails applied by the triage module)
+# --------------------------------------------------------------------------- #
+def dispatch_triage(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Run the triage agent, record decisions, queue critical/high findings."""
+    app = _app_of(deps, payload["app_id"])
+    if app is None:
+        return {**payload, "error": "unknown_application"}
+
+    finding_ids = payload.get("findings_created") or []
+    findings = load_findings(deps, finding_ids)
+    if not findings:
+        return {**payload, "triaged": 0, "queued": []}
+
+    proposals = run_proposals(deps, app, findings, finding_ids)
+    queued, confirmed = apply_proposals(deps, proposals)
+
+    return {
+        **payload,
+        "triaged": len(proposals),
+        "queued": queued,
+        "confirmed": confirmed,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 6. Create tickets (EF-COR-01/02)
+# --------------------------------------------------------------------------- #
+def create_tickets(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Open a GitHub issue for every confirmed finding, with its due date.
+
+    A finding is eligible when its status is ``confirmed``: the triage agent
+    always queues Critical and High findings for human validation (EF-TRI-05),
+    so the ticket is created once the analyst has confirmed it.
+    """
+    app = _app_of(deps, payload["app_id"])
+    if app is None:
+        return {**payload, "error": "unknown_application"}
+    if deps.github is None:
+        return {**payload, "tickets": [], "reason": "no_github_client"}
+
+    owner = deps.settings.github_owner
+    repo = (app.repositories or [""])[0]
+    repo_name = repo.split("/")[-1] if repo else ""
+    if not owner or not repo_name:
+        return {**payload, "tickets": [], "reason": "no_target_repo"}
+
+    eligible = payload.get("confirmed") or None
+    if eligible is None:
+        eligible = [
+            f.finding_id
+            for f in deps.store.list_findings(app_id=app.app_id)
+            if f.status == "confirmed"
+        ]
+
+    tickets: list[str] = []
+    for finding_id in eligible:
+        finding = deps.store.get_finding(finding_id)
+        if finding is None or finding.ticket_url:
+            continue
+        body = _ticket_body(finding)
+        issue = deps.github.create_issue(
+            owner=owner,
+            repo=repo_name,
+            title=f"[{finding.priority}] {finding.title}",
+            body=body,
+            labels=["security", finding.priority.lower()],
+        )
+        finding.ticket_url = issue.get("html_url", "")
+        finding.status = "in_remediation"
+        finding.updated_at = iso(utcnow())
+        deps.store.save_finding(finding)
+        tickets.append(finding.ticket_url)
+
+    return {**payload, "tickets": tickets}
+
+
+def _ticket_body(finding: Finding) -> str:
+    lines = [
+        f"**Priority:** {finding.priority}",
+        f"**Severity:** {finding.severity} (confidence {finding.confidence})",
+        f"**Risk type:** {finding.risk_type}",
+        f"**Due date:** {finding.due_at or 'next release'}",
+        "",
+        "### Summary",
+        finding.evidence.get("description", ""),
+        "",
+        f"_Opened automatically by Rempart from test `{finding.run_id}`. "
+        f"Finding id: `{finding.finding_id}`._",
+    ]
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# 7. Request remediation (EF-COR-03)
+# --------------------------------------------------------------------------- #
+def request_remediation(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Ask Security Agent for a remediation pull request."""
+    links: list[str] = []
+    for finding_id in payload.get("confirmed", []) or payload.get("queued", []):
+        finding = deps.store.get_finding(finding_id)
+        if finding is None or finding.remediation_pr_url:
+            continue
+        resp = deps.sa.start_code_remediation(finding.finding_id)
+        url = resp.get("remediationPrUrl") or resp.get("pullRequestUrl")
+        if url:
+            finding.remediation_pr_url = url
+            finding.updated_at = iso(utcnow())
+            deps.store.save_finding(finding)
+            links.append(url)
+    return {**payload, "remediation_prs": links}
+
+
+# --------------------------------------------------------------------------- #
+# 8. Close or reopen (EF-COR-04/05, EF-TRI-06)
+# --------------------------------------------------------------------------- #
+def close_or_reopen(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
+    """Close findings that disappeared from the retest, reopen the ones still there."""
+    app = _app_of(deps, payload["app_id"])
+    if app is None:
+        return {**payload, "error": "unknown_application"}
+
+    run_id = payload.get("run_id") or payload.get("retest_run_id") or ""
+    present = {
+        make_fingerprint(
+            app.app_id,
+            str(raw.get("riskType") or raw.get("risk_type") or "Unknown"),
+            str(raw.get("entryPoint") or raw.get("entry_point") or ""),
+            raw.get("parameter"),
+        )
+        for raw in deps.sa.list_findings(run_id)
+    }
+
+    closed: list[str] = []
+    reopened: list[str] = []
+    for finding in deps.store.list_findings(app_id=app.app_id):
+        # "closed" is included: a finding that comes back is a regression
+        # (EF-TRI-06) and must be reopened, not silently ignored.
+        if finding.status not in ("in_remediation", "to_retest", "reopened", "closed"):
+            continue
+        if finding.fingerprint in present:
+            if finding.status != "reopened":
+                finding.status = "reopened"
+                finding.closed_at = None
+                finding.closed_by_run_id = None
+                reopened.append(finding.finding_id)
+        else:
+            if finding.status == "closed":
+                continue
+            finding.status = "closed"
+            finding.closed_at = iso(utcnow())
+            finding.closed_by_run_id = run_id
+            closed.append(finding.finding_id)
+        finding.updated_at = iso(utcnow())
+        deps.store.save_finding(finding)
+
+    return {**payload, "closed": closed, "reopened": reopened}
+
+
+def delivery_config(deps: Deps, app_id: str) -> TestConfig | None:
+    """Return the 'delivery' test configuration of an application."""
+    for config in deps.store.list_configs(app_id):
+        if config.kind == "delivery":
+            return config
+    return None
+
+
+def now_iso() -> str:
+    """Current UTC timestamp in ISO-8601 (helper for step functions)."""
+    return iso(utcnow())
+
+
+def parse_dt(value: str) -> datetime:
+    """Parse an ISO-8601 timestamp (helper for step functions)."""
+    return parse_iso(value)

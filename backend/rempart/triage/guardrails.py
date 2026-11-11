@@ -4,14 +4,14 @@ import logging
 from typing import Any
 
 from rempart.common.models import Application, Finding
-from rempart.common.priority import compute_priority
+from rempart.common.priority import PriorityResult, compute_priority
 
 from .proposal import TriageProposal
 
 logger = logging.getLogger(__name__)
 
 _SENSITIVE_DATA_TYPES = {"personal", "payment", "health"}
-_HIGH_SEVERITIES = {"Critical", "High"}
+HIGH_SEVERITIES = {"Critical", "High"}
 
 
 def _is_exposed_critical(app: Application) -> bool:
@@ -21,6 +21,16 @@ def _is_exposed_critical(app: Application) -> bool:
 def _has_sensitive_data(app: Application) -> bool:
     types = {str(t).lower() for t in getattr(app, "data_types", [])}
     return bool(types & _SENSITIVE_DATA_TYPES)
+
+
+def compute_finding_priority(finding: Finding, app: Application) -> PriorityResult:
+    """Compute deterministic priority for a finding in its application context."""
+    return compute_priority(
+        finding.severity,
+        finding.confidence,
+        exposed_critical=_is_exposed_critical(app),
+        sensitive_data=_has_sensitive_data(app),
+    )
 
 
 def _check_regression(
@@ -42,6 +52,54 @@ def _check_regression(
     return False
 
 
+def _enforce_priority(
+    proposal: TriageProposal,
+    finding: Finding,
+    app: Application,
+) -> tuple[str, bool]:
+    """Recompute matrix priority and log divergence if model priority differed."""
+    p_result = compute_finding_priority(finding, app)
+    if proposal.priority != p_result.priority:
+        logger.warning(
+            "Priority divergence for finding %s: proposal=%s matrix=%s. Matrix wins.",
+            finding.finding_id,
+            proposal.priority,
+            p_result.priority,
+        )
+    return p_result.priority, p_result.needs_validation
+
+
+def _enforce_false_positive_rule(
+    proposal: TriageProposal,
+    finding: Finding,
+    needs_validation: bool,
+) -> tuple[str, bool]:
+    """ENF-IA-02: Critical/High false positive proposals require human verification."""
+    final_status = proposal.proposed_status
+    final_needs_human = proposal.needs_human_validation or needs_validation
+
+    if proposal.proposed_status == "LIKELY_FALSE_POSITIVE" and finding.severity in HIGH_SEVERITIES:
+        logger.warning(
+            "Guardrail EF-TRI-05/ENF-IA-02 triggered on %s: false positive on %s overridden.",
+            finding.finding_id,
+            finding.severity,
+        )
+        final_status = "TO_VERIFY"
+        final_needs_human = True
+
+    return final_status, final_needs_human
+
+
+def _enforce_regression(
+    proposal: TriageProposal,
+    finding: Finding,
+    known_findings: list[Finding] | None,
+    store: Any,
+) -> bool:
+    """ENF-IA-01 / R7: Preserve or detect regression against closed findings."""
+    return proposal.is_regression or _check_regression(finding, known_findings, store)
+
+
 def enforce(
     proposal: TriageProposal,
     finding: Finding,
@@ -58,34 +116,11 @@ def enforce(
     3) Regression detection: if finding fingerprint matches a previously closed finding,
        mark is_regression = True.
     """
-    p_result = compute_priority(
-        finding.severity,
-        finding.confidence,
-        exposed_critical=_is_exposed_critical(app),
-        sensitive_data=_has_sensitive_data(app),
+    final_priority, needs_validation = _enforce_priority(proposal, finding, app)
+    final_status, final_needs_human = _enforce_false_positive_rule(
+        proposal, finding, needs_validation
     )
-    final_priority = p_result.priority
-    if proposal.priority != final_priority:
-        logger.warning(
-            "Priority divergence for finding %s: proposal=%s matrix=%s. Matrix wins.",
-            finding.finding_id,
-            proposal.priority,
-            final_priority,
-        )
-
-    final_status = proposal.proposed_status
-    final_needs_human = proposal.needs_human_validation or p_result.needs_validation
-
-    if proposal.proposed_status == "LIKELY_FALSE_POSITIVE" and finding.severity in _HIGH_SEVERITIES:
-        logger.warning(
-            "Guardrail EF-TRI-05/ENF-IA-02 triggered on %s: false positive on %s overridden.",
-            finding.finding_id,
-            finding.severity,
-        )
-        final_status = "TO_VERIFY"
-        final_needs_human = True
-
-    is_reg = proposal.is_regression or _check_regression(finding, known_findings, store)
+    is_reg = _enforce_regression(proposal, finding, known_findings, store)
 
     return TriageProposal(
         finding_id=proposal.finding_id,

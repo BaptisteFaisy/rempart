@@ -3,9 +3,8 @@
 from typing import Any
 
 from rempart.common.models import Application, Decision, Finding
-from rempart.common.priority import compute_priority
 
-from .guardrails import _has_sensitive_data, _is_exposed_critical, enforce
+from .guardrails import HIGH_SEVERITIES, compute_finding_priority, enforce
 from .prompts import SYSTEM_PROMPT, format_finding_for_prompt
 from .proposal import TriageProposal
 from .tools import (
@@ -80,6 +79,82 @@ def _build_strands_tools(ctx: TriageContext) -> list[Any]:
     ]
 
 
+def _find_duplicate(finding: Finding, existing: Finding | None) -> str | None:
+    """Return the existing finding_id if this finding duplicates an open/known finding."""
+    if (
+        existing is not None
+        and existing.status != "closed"
+        and existing.finding_id != finding.finding_id
+    ):
+        return existing.finding_id
+    return None
+
+
+def _detect_regression(existing: Finding | None) -> bool:
+    """Return True when the fingerprint matches a previously closed finding."""
+    return existing is not None and existing.status == "closed"
+
+
+def _resolve_proposed_status(
+    existing: Finding | None,
+    needs_validation: bool,
+    decisions_by_finding: dict[str, list[Decision]],
+) -> str:
+    """Determine proposed status from priority validation and historical human decisions."""
+    proposed_status = "TO_VERIFY" if needs_validation else "CONFIRMED"
+    if existing is not None and existing.status == "false_positive":
+        proposed_status = "LIKELY_FALSE_POSITIVE"
+
+    if existing is not None:
+        for dec in reversed(decisions_by_finding.get(existing.finding_id, [])):
+            if dec.author_type == "human" and dec.action == "false_positive":
+                return "LIKELY_FALSE_POSITIVE"
+    return proposed_status
+
+
+def _entry_point(finding: Finding) -> Any:
+    return finding.evidence.get("entry_point", "") if isinstance(finding.evidence, dict) else ""
+
+
+def _build_plain_summary(finding: Finding, app: Application, priority: str) -> str:
+    """Build a non-technical 3-sentence summary for stakeholders."""
+    entry_pt = _entry_point(finding)
+    return (
+        f"Une vulnérabilité de type {finding.risk_type} ({finding.severity}) a été détectée "
+        f"sur {app.name}. "
+        f"Le point d'entrée concerné est {entry_pt or 'non spécifié'}. "
+        f"Une correction priorisée {priority} est recommandée."
+    )
+
+
+def _build_technical_summary(finding: Finding) -> str:
+    """Build a concise technical summary from finding attributes."""
+    entry_pt = _entry_point(finding)
+    return (
+        f"{finding.title} — risk_type={finding.risk_type}, severity={finding.severity}, "
+        f"confidence={finding.confidence}, entry_point={entry_pt}."
+    )
+
+
+def _build_justification(finding: Finding, app: Application) -> str:
+    """Build the deterministic priority and context justification."""
+    return (
+        f"Sévérité {finding.severity}, confiance {finding.confidence}, "
+        f"exposition={app.internet_exposed}, criticité={app.criticality}."
+    )
+
+
+def _index_known_findings(known_findings: list[Finding], app_id: str) -> dict[str, Finding]:
+    return {kf.fingerprint: kf for kf in known_findings if kf.app_id == app_id}
+
+
+def _index_decisions(past_decisions: list[Decision]) -> dict[str, list[Decision]]:
+    decisions_by_finding: dict[str, list[Decision]] = {}
+    for dec in past_decisions:
+        decisions_by_finding.setdefault(dec.finding_id, []).append(dec)
+    return decisions_by_finding
+
+
 def _deterministic_proposal(
     finding: Finding,
     app: Application,
@@ -88,48 +163,13 @@ def _deterministic_proposal(
 ) -> TriageProposal:
     """Compute a deterministic fallback triage proposal for a single finding."""
     existing = known_by_fp.get(finding.fingerprint)
-    is_regression = existing is not None and existing.status == "closed"
-    duplicate_of = (
-        existing.finding_id
-        if existing is not None
-        and existing.status != "closed"
-        and existing.finding_id != finding.finding_id
-        else None
+    is_regression = _detect_regression(existing)
+    duplicate_of = _find_duplicate(finding, existing)
+    p_res = compute_finding_priority(finding, app)
+    proposed_status = _resolve_proposed_status(
+        existing, p_res.needs_validation, decisions_by_finding
     )
-
-    p_res = compute_priority(
-        finding.severity,
-        finding.confidence,
-        exposed_critical=_is_exposed_critical(app),
-        sensitive_data=_has_sensitive_data(app),
-    )
-
-    proposed_status = "TO_VERIFY" if p_res.needs_validation else "CONFIRMED"
-    if existing is not None and existing.status == "false_positive":
-        proposed_status = "LIKELY_FALSE_POSITIVE"
-
-    if existing is not None:
-        for dec in reversed(decisions_by_finding.get(existing.finding_id, [])):
-            if dec.author_type == "human" and dec.action == "false_positive":
-                proposed_status = "LIKELY_FALSE_POSITIVE"
-                break
-
-    entry_pt = finding.evidence.get("entry_point", "") if isinstance(finding.evidence, dict) else ""
-    plain = (
-        f"Une vulnérabilité de type {finding.risk_type} ({finding.severity}) a été détectée "
-        f"sur {app.name}. "
-        f"Le point d'entrée concerné est {entry_pt or 'non spécifié'}. "
-        f"Une correction priorisée {p_res.priority} est recommandée."
-    )
-    tech = (
-        f"{finding.title} — risk_type={finding.risk_type}, severity={finding.severity}, "
-        f"confidence={finding.confidence}, entry_point={entry_pt}."
-    )
-    justif = (
-        f"Sévérité {finding.severity}, confiance {finding.confidence}, "
-        f"exposition={app.internet_exposed}, criticité={app.criticality}."
-    )
-    needs_human = p_res.needs_validation or finding.severity in ("Critical", "High")
+    needs_human = p_res.needs_validation or finding.severity in HIGH_SEVERITIES
 
     return TriageProposal(
         finding_id=finding.finding_id,
@@ -137,10 +177,10 @@ def _deterministic_proposal(
         is_regression=is_regression,
         proposed_status=proposed_status,
         priority=p_res.priority,
-        plain_summary=plain,
-        technical_summary=tech,
+        plain_summary=_build_plain_summary(finding, app, p_res.priority),
+        technical_summary=_build_technical_summary(finding),
         references=[finding.risk_type] if finding.risk_type else [],
-        justification=justif,
+        justification=_build_justification(finding, app),
         needs_human_validation=needs_human,
     )
 
@@ -151,14 +191,8 @@ def _deterministic_triage(
     known_findings: list[Finding],
     past_decisions: list[Decision],
 ) -> list[TriageProposal]:
-    known_by_fp: dict[str, Finding] = {}
-    for kf in known_findings:
-        if kf.app_id == app.app_id:
-            known_by_fp[kf.fingerprint] = kf
-
-    decisions_by_finding: dict[str, list[Decision]] = {}
-    for dec in past_decisions:
-        decisions_by_finding.setdefault(dec.finding_id, []).append(dec)
+    known_by_fp = _index_known_findings(known_findings, app.app_id)
+    decisions_by_finding = _index_decisions(past_decisions)
 
     proposals: list[TriageProposal] = []
     for f in findings:
@@ -218,10 +252,8 @@ def run_triage(
         raw_proposals = _deterministic_triage(findings, app, known_findings, past_decisions)
 
     proposals_by_id = {p.finding_id: p for p in raw_proposals}
-    known_by_fp = {kf.fingerprint: kf for kf in known_findings if kf.app_id == app.app_id}
-    decisions_by_finding: dict[str, list[Decision]] = {}
-    for dec in past_decisions:
-        decisions_by_finding.setdefault(dec.finding_id, []).append(dec)
+    known_by_fp = _index_known_findings(known_findings, app.app_id)
+    decisions_by_finding = _index_decisions(past_decisions)
 
     enforced: list[TriageProposal] = []
     for f in findings:

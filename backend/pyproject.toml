@@ -15,3 +15,6 @@ select = ["E", "F", "W", "I"]
 # sur une seule ligne ; les couper cassait le rendu (longueur de ligne
 # non fonctionnelle ici).
 "rempart/reports/monthly.py" = ["E501"]
+"rempart/reports/html_renderer.py" = ["E501"]
+"rempart/reports/pdf_renderer.py" = ["E501"]
+"rempart/reports/summary.py" = ["E501"]

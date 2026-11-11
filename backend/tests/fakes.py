@@ -267,7 +267,7 @@ class FakeSecurityAgentClient:
         return obj
 
     def start_pentest_job(self, pentest_id: str, **kw: Any) -> dict[str, Any]:
-        job_id = f"job-{uuid.uuid4().hex[:8]}"
+        job_id = kw.get("jobId") or f"job-{uuid.uuid4().hex[:8]}"
         job = {"jobId": job_id, "pentestId": pentest_id, "status": "RUNNING"}
         self.jobs[job_id] = job
         return {"jobId": job_id}
@@ -299,6 +299,10 @@ class FakeSecurityAgentClient:
 
     def list_pentests(self, space_id: str) -> list[dict[str, Any]]:
         return [p for p in self.pentests.values() if p.get("spaceId") == space_id]
+
+    def list_pentest_jobs_for_pentest(self, pentest_id: str) -> list[dict[str, Any]]:
+        """List the jobs belonging to a pentest (used by the CI/CD discovery)."""
+        return [j for j in self.jobs.values() if j.get("pentestId") == pentest_id]
 
     def list_findings(self, job_id: str) -> list[dict[str, Any]]:
         return self.findings_by_job.get(job_id, [])

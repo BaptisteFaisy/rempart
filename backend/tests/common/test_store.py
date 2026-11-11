@@ -44,11 +44,11 @@ def store_instance(request):
     return Store(ddb_resource=ddb, table_prefix="test-")
 
 
-def test_store_crud_lifecycle(store_instance):
-    s = store_instance
-
-    # Tenant
-    t = Tenant(
+# --------------------------------------------------------------------------- #
+# Object builders: one per model, reused by every CRUD test below.
+# --------------------------------------------------------------------------- #
+def _tenant() -> Tenant:
+    return Tenant(
         tenant_id="t-1",
         name="Acme",
         aws_account_id="123456789012",
@@ -61,12 +61,10 @@ def test_store_crud_lifecycle(store_instance):
         mandate_status="valid",
         created_at="2026-11-10T09:00:00Z",
     )
-    s.save_tenant(t)
-    assert s.get_tenant("t-1").name == "Acme"
-    assert len(s.list_tenants()) == 1
 
-    # Application
-    app = Application(
+
+def _application() -> Application:
+    return Application(
         app_id="app-1",
         tenant_id="t-1",
         name="ShopLite",
@@ -82,18 +80,14 @@ def test_store_crud_lifecycle(store_instance):
         context={},
         created_at="2026-11-10T09:00:00Z",
     )
-    s.save_application(app)
-    assert s.get_application("app-1").criticality == "high"
-    assert len(s.list_applications("t-1")) == 1
-    assert len(s.list_applications("other")) == 0
 
-    # TestConfig
-    cfg = TestConfig("cfg-1", "app-1", "sa-1", "delivery", {}, ["IDOR"], "High", None)
-    s.save_config(cfg)
-    assert len(s.list_configs("app-1")) == 1
 
-    # Run
-    r = Run(
+def _test_config() -> TestConfig:
+    return TestConfig("cfg-1", "app-1", "sa-1", "delivery", {}, ["IDOR"], "High", None)
+
+
+def _run() -> Run:
+    return Run(
         "run-1",
         "cfg-1",
         "app-1",
@@ -109,12 +103,10 @@ def test_store_crud_lifecycle(store_instance):
         1.5,
         75.0,
     )
-    s.save_run(r)
-    assert s.get_run("run-1").status == "running"
-    assert len(s.list_runs(app_id="app-1")) == 1
 
-    # Finding
-    f = Finding(
+
+def _finding() -> Finding:
+    return Finding(
         finding_id="f-1",
         app_id="app-1",
         tenant_id="t-1",
@@ -136,33 +128,84 @@ def test_store_crud_lifecycle(store_instance):
         closed_at=None,
         closed_by_run_id=None,
     )
-    s.save_finding(f)
+
+
+def _decision() -> Decision:
+    return Decision(
+        "d-1", "f-1", "human", "analyst", "confirmed", "valid finding", "2026-11-10T10:00:00Z"
+    )
+
+
+def _report() -> Report:
+    return Report(
+        "rep-1", "t-1", "2026-11", "s3://reports/rep-1.pdf", {"kpi": 10}, "2026-11-10T10:00:00Z"
+    )
+
+
+def _budget() -> BudgetState:
+    return BudgetState("t-1", "2026-11", 15.0, [50], False)
+
+
+# --------------------------------------------------------------------------- #
+# CRUD lifecycle, split per family of objects (same coverage as before).
+# --------------------------------------------------------------------------- #
+def test_store_tenant_crud(store_instance):
+    s = store_instance
+
+    s.save_tenant(_tenant())
+
+    assert s.get_tenant("t-1").name == "Acme"
+    assert len(s.list_tenants()) == 1
+
+
+def test_store_application_config_run_crud(store_instance):
+    s = store_instance
+    s.save_tenant(_tenant())
+
+    s.save_application(_application())
+
+    assert s.get_application("app-1").criticality == "high"
+    assert len(s.list_applications("t-1")) == 1
+    assert len(s.list_applications("other")) == 0
+
+    s.save_config(_test_config())
+
+    assert len(s.list_configs("app-1")) == 1
+
+    s.save_run(_run())
+
+    assert s.get_run("run-1").status == "running"
+    assert len(s.list_runs(app_id="app-1")) == 1
+
+
+def test_store_finding_decision_report_crud(store_instance):
+    s = store_instance
+
+    s.save_finding(_finding())
+
     assert s.get_finding("f-1").title == "IDOR"
     assert s.find_by_fingerprint("app-1", "fp12345678901234").finding_id == "f-1"
     assert len(s.list_findings(tenant_id="t-1", priority="P1")) == 1
 
-    # Decision
-    d = Decision(
-        "d-1", "f-1", "human", "analyst", "confirmed", "valid finding", "2026-11-10T10:00:00Z"
-    )
-    s.save_decision(d)
+    s.save_decision(_decision())
+
     assert len(s.list_decisions("f-1")) == 1
 
-    # Report
-    rep = Report(
-        "rep-1", "t-1", "2026-11", "s3://reports/rep-1.pdf", {"kpi": 10}, "2026-11-10T10:00:00Z"
-    )
-    s.save_report(rep)
+    s.save_report(_report())
+
     assert s.get_report("rep-1").period == "2026-11"
     assert len(s.list_reports("t-1")) == 1
 
-    # Budget
-    b = BudgetState("t-1", "2026-11", 15.0, [50], False)
-    s.save_budget(b)
+
+def test_store_budget_and_audit_crud(store_instance):
+    s = store_instance
+
+    s.save_budget(_budget())
     loaded_b = s.get_budget("t-1", "2026-11")
+
     assert loaded_b.hours_used == 15.0
 
-    # Audit
     evt = s.append_audit("analyst-1", "confirm_finding", "finding", "f-1")
+
     assert evt.object_id == "f-1"
     assert len(s.list_audit(object_type="finding")) == 1
