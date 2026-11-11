@@ -5,11 +5,11 @@ name: ci-iac (synth CDK + template client)
 # du cahier des charges.
 
 on:
+# Pas de filtre `paths:` sur pull_request : la file Mergify exige les
+# checks `backend`, `portal`, `demo` sur CHAQUE PR (un filtre les rendrait
+# absents sur une PR de doc, et la PR ne pourrait jamais fusionner).
+# Les filtres `paths:` restent sur les push vers main.
   pull_request:
-    paths:
-      - "iac/**"
-      - "backend/tests/iac/**"
-      - ".github/workflows/ci-iac.yml"
   push:
     branches: [main]
     paths:

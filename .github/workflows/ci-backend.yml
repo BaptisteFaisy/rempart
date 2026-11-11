@@ -5,10 +5,11 @@ name: ci-backend (pytest + ruff)
 # 2026-10-24). Les tests n'appellent jamais AWS : tout passe par les fakes.
 
 on:
+# Pas de filtre `paths:` sur pull_request : la file Mergify exige les
+# checks `backend`, `portal`, `demo` sur CHAQUE PR (un filtre les rendrait
+# absents sur une PR de doc, et la PR ne pourrait jamais fusionner).
+# Les filtres `paths:` restent sur les push vers main.
   pull_request:
-    paths:
-      - "backend/**"
-      - ".github/workflows/ci-backend.yml"
   push:
     branches: [main]
     paths:
