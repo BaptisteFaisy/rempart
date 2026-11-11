@@ -17,7 +17,8 @@
       "monthly_budget_hours": 40.0,
       "mandate_status": "valid",
       "created_at": "2026-10-05T08:00:00Z",
-      "free_tier_confirmed": false
+      "free_tier_confirmed": false,
+      "policy": {}
     },
     {
       "tenant_id": "demo-b",
@@ -36,7 +37,8 @@
       "monthly_budget_hours": 20.0,
       "mandate_status": "valid",
       "created_at": "2026-10-05T08:00:00Z",
-      "free_tier_confirmed": false
+      "free_tier_confirmed": false,
+      "policy": {}
     }
   ],
   "applications": [

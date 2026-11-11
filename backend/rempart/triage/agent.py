@@ -5,6 +5,7 @@ from typing import Any
 from rempart.common.models import Application, Decision, Finding
 
 from .guardrails import HIGH_SEVERITIES, compute_finding_priority, enforce
+from .memory import MemoryMatch, memory_match
 from .prompts import SYSTEM_PROMPT, format_finding_for_prompt
 from .proposal import TriageProposal
 from .tools import (
@@ -61,9 +62,12 @@ def _build_strands_tools(ctx: TriageContext) -> list[Any]:
         return get_finding_detail(ctx, finding_id)
 
     @tool
-    def tool_get_past_decisions(app_id: str) -> list[dict[str, Any]]:
-        """Get past analyst triage decisions for the application."""
-        return get_past_decisions(ctx, app_id)
+    def tool_get_past_decisions(
+        app_id: str,
+        fingerprint: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get past analyst triage decisions, optionally for one finding fingerprint."""
+        return get_past_decisions(ctx, app_id, fingerprint=fingerprint)
 
     @tool
     def tool_submit_triage_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
@@ -98,17 +102,14 @@ def _detect_regression(existing: Finding | None) -> bool:
 def _resolve_proposed_status(
     existing: Finding | None,
     needs_validation: bool,
-    decisions_by_finding: dict[str, list[Decision]],
+    match: MemoryMatch | None,
 ) -> str:
-    """Determine proposed status from priority validation and historical human decisions."""
+    """Determine proposed status: analyst decision memory (EF-TRI-09) wins over defaults."""
+    if match is not None:
+        return match.proposed_status
     proposed_status = "TO_VERIFY" if needs_validation else "CONFIRMED"
     if existing is not None and existing.status == "false_positive":
         proposed_status = "LIKELY_FALSE_POSITIVE"
-
-    if existing is not None:
-        for dec in reversed(decisions_by_finding.get(existing.finding_id, [])):
-            if dec.author_type == "human" and dec.action == "false_positive":
-                return "LIKELY_FALSE_POSITIVE"
     return proposed_status
 
 
@@ -136,39 +137,35 @@ def _build_technical_summary(finding: Finding) -> str:
     )
 
 
-def _build_justification(finding: Finding, app: Application) -> str:
-    """Build the deterministic priority and context justification."""
-    return (
+def _build_justification(
+    finding: Finding, app: Application, match: MemoryMatch | None = None
+) -> str:
+    """Build the deterministic priority and context justification, plus memory citation."""
+    base = (
         f"Sévérité {finding.severity}, confiance {finding.confidence}, "
         f"exposition={app.internet_exposed}, criticité={app.criticality}."
     )
+    if match is not None:
+        return f"{base} {match.justification()}"
+    return base
 
 
 def _index_known_findings(known_findings: list[Finding], app_id: str) -> dict[str, Finding]:
     return {kf.fingerprint: kf for kf in known_findings if kf.app_id == app_id}
 
 
-def _index_decisions(past_decisions: list[Decision]) -> dict[str, list[Decision]]:
-    decisions_by_finding: dict[str, list[Decision]] = {}
-    for dec in past_decisions:
-        decisions_by_finding.setdefault(dec.finding_id, []).append(dec)
-    return decisions_by_finding
-
-
 def _deterministic_proposal(
     finding: Finding,
     app: Application,
     known_by_fp: dict[str, Finding],
-    decisions_by_finding: dict[str, list[Decision]],
+    match: MemoryMatch | None = None,
 ) -> TriageProposal:
     """Compute a deterministic fallback triage proposal for a single finding."""
     existing = known_by_fp.get(finding.fingerprint)
     is_regression = _detect_regression(existing)
     duplicate_of = _find_duplicate(finding, existing)
     p_res = compute_finding_priority(finding, app)
-    proposed_status = _resolve_proposed_status(
-        existing, p_res.needs_validation, decisions_by_finding
-    )
+    proposed_status = _resolve_proposed_status(existing, p_res.needs_validation, match)
     needs_human = p_res.needs_validation or finding.severity in HIGH_SEVERITIES
 
     return TriageProposal(
@@ -180,7 +177,7 @@ def _deterministic_proposal(
         plain_summary=_build_plain_summary(finding, app, p_res.priority),
         technical_summary=_build_technical_summary(finding),
         references=[finding.risk_type] if finding.risk_type else [],
-        justification=_build_justification(finding, app),
+        justification=_build_justification(finding, app, match),
         needs_human_validation=needs_human,
     )
 
@@ -190,13 +187,16 @@ def _deterministic_triage(
     app: Application,
     known_findings: list[Finding],
     past_decisions: list[Decision],
+    store: Any = None,
 ) -> list[TriageProposal]:
     known_by_fp = _index_known_findings(known_findings, app.app_id)
-    decisions_by_finding = _index_decisions(past_decisions)
 
     proposals: list[TriageProposal] = []
     for f in findings:
-        prop = _deterministic_proposal(f, app, known_by_fp, decisions_by_finding)
+        match = memory_match(
+            f, known_findings=known_findings, past_decisions=past_decisions, store=store
+        )
+        prop = _deterministic_proposal(f, app, known_by_fp, match)
         proposals.append(prop)
         if f.fingerprint not in known_by_fp:
             known_by_fp[f.fingerprint] = f
@@ -249,16 +249,20 @@ def run_triage(
     if _strands_available() and _is_real_strands_model(model_client):
         raw_proposals = _run_strands_agent(ctx, model_client)
     else:
-        raw_proposals = _deterministic_triage(findings, app, known_findings, past_decisions)
+        raw_proposals = _deterministic_triage(
+            findings, app, known_findings, past_decisions, store=store
+        )
 
     proposals_by_id = {p.finding_id: p for p in raw_proposals}
     known_by_fp = _index_known_findings(known_findings, app.app_id)
-    decisions_by_finding = _index_decisions(past_decisions)
 
     enforced: list[TriageProposal] = []
     for f in findings:
         prop = proposals_by_id.get(f.finding_id)
         if prop is None:
-            prop = _deterministic_proposal(f, app, known_by_fp, decisions_by_finding)
+            match = memory_match(
+                f, known_findings=known_findings, past_decisions=past_decisions, store=store
+            )
+            prop = _deterministic_proposal(f, app, known_by_fp, match)
         enforced.append(enforce(prop, f, app, known_findings=known_findings, store=store))
     return enforced

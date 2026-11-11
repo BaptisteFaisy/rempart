@@ -66,8 +66,12 @@ def _ts(value: str | None) -> datetime | None:
         return None
 
 
-def _within(value: str | None, start: datetime, end: datetime) -> bool:
-    """True when the ISO timestamp falls inside [start, end)."""
+def within_period(value: str | None, start: datetime, end: datetime) -> bool:
+    """True when the ISO timestamp falls inside [start, end).
+
+    Public because :mod:`rempart.reports.evidence` reuses the exact same
+    period filtering as the KPIs (no duplicated time logic).
+    """
     moment = _ts(value)
     return moment is not None and start <= moment < end
 
@@ -98,18 +102,18 @@ class Scope:
     end: datetime
 
 
-def _gather_scope(store: Store, tenant_id: str | None, period: str) -> Scope:
+def gather_scope(store: Store, tenant_id: str | None, period: str) -> Scope:
     """Collect applications, runs and findings of the tenant for the period."""
     start, end = period_bounds(period)
     apps = store.list_applications(tenant_id=tenant_id)
     runs = [
         r
         for r in store.list_runs(tenant_id=tenant_id, limit=MAX_FETCH)
-        if _within(r.started_at, start, end)
+        if within_period(r.started_at, start, end)
     ]
     all_findings = store.list_findings(tenant_id=tenant_id, limit=MAX_FETCH)
-    detected = [f for f in all_findings if _within(f.created_at, start, end)]
-    closed = [f for f in all_findings if _within(f.closed_at, start, end)]
+    detected = [f for f in all_findings if within_period(f.created_at, start, end)]
+    closed = [f for f in all_findings if within_period(f.closed_at, start, end)]
     open_findings = [f for f in all_findings if f.status in OPEN_STATUSES]
     return Scope(
         apps=apps,
@@ -127,7 +131,7 @@ def _gather_scope(store: Store, tenant_id: str | None, period: str) -> Scope:
 # --------------------------------------------------------------------------- #
 # Individual KPI computations
 # --------------------------------------------------------------------------- #
-def _run_duration_hours(run: Run) -> float | None:
+def run_duration_hours(run: Run) -> float | None:
     """Duration of a run in hours (duration_s first, timestamps otherwise)."""
     if run.duration_s is not None and run.duration_s >= 0:
         return run.duration_s / 3600.0
@@ -142,7 +146,7 @@ def delivery_to_result_hours(scope: Scope) -> float:
     durations = [
         hours
         for hours in (
-            _run_duration_hours(r)
+            run_duration_hours(r)
             for r in scope.runs
             if r.trigger == "cicd" and r.status in FINISHED_RUN_STATUSES
         )
@@ -395,7 +399,7 @@ def recommendations(scope: Scope) -> list[str]:
 # --------------------------------------------------------------------------- #
 def compute_kpis(store: Store, *, tenant_id: str | None, period: str) -> dict[str, Any]:
     """Compute the deterministic KPI set of 'period' ('YYYY-MM') for a tenant."""
-    scope = _gather_scope(store, tenant_id, period)
+    scope = gather_scope(store, tenant_id, period)
     open_counts = findings_open_by_priority(scope)
     return {
         "period": period,
@@ -421,7 +425,7 @@ def compute_kpis(store: Store, *, tenant_id: str | None, period: str) -> dict[st
 def freeze_month(store: Store, tenant_id: str | None, period: str) -> dict[str, Any]:
     """Freeze the indicators of 'period' (chapter 8.5) and return the snapshot."""
     frozen_at = freeze_date(period)
-    scope = _gather_scope(store, tenant_id, period)
+    scope = gather_scope(store, tenant_id, period)
     kpis = compute_kpis(store, tenant_id=tenant_id, period=period)
     snapshot: dict[str, Any] = {
         **kpis,

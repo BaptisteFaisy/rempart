@@ -111,6 +111,91 @@ triage proposals, tickets, retest proofs and the monthly report are persisted in
 DynamoDB and S3, so every screen above renders from stored data. The recorded
 walkthrough in the submission video shows the same flow with real timestamps.
 
+## Running the demo locally with zero AWS cost
+
+No AWS account, no credentials, no bill. The whole product runs on
+`127.0.0.1`: the React portal, the **real** chapter-14 `lambda_handler`, and the
+frozen demo dataset.
+
+```bash
+# 1. Check that everything mounts (lists the served routes, exits 0, never blocks)
+python3 scripts/serve_local.py --check
+
+# 2. Terminal 1 — local API on http://127.0.0.1:8000
+python3 scripts/serve_local.py
+
+# 3. Terminal 2 — portal dependencies (once)
+cd portal && npm ci
+
+# 4. Terminal 2 — portal wired to the local API
+npm run dev:local          # then open http://localhost:5173/fleet
+```
+
+Want the portal alone, with no server at all? `npm run dev:offline`
+(`VITE_USE_MOCKS=1`) serves the same frozen dataset in the browser and shows a
+permanent orange **OFFLINE DEMO MODE** banner, so nobody mistakes it for live
+data.
+
+### What is actually running
+
+`scripts/serve_local.py` is a Python **standard-library** HTTP server (no new
+dependency, Python or npm). It loads `demo/seed/demo-dataset.json` into the
+in-memory `FakeStore`, injects the `FakeSecurityAgentClient`, translates every
+request into an API Gateway HTTP API v2 event and calls
+`rempart.api.app.lambda_handler` — the same function that runs in Lambda, with
+the same router, the same authorization matrix and the same tenant isolation.
+
+There is **one** dataset. `scripts/seed_demo.py` generates it,
+`demo/seed/demo-dataset.json` stores it, the local API serves it and the offline
+portal imports the very same file. Two demo customers, two applications, four
+test configurations, six runs, six findings covering the whole lifecycle
+(`new`, `pending_validation`, `confirmed`, `in_remediation`, `closed` with a
+retest proof), ten decisions, consumed budgets and two monthly reports.
+
+### Demo identity — not an authentication mechanism
+
+Two headers are turned into synthetic Cognito claims so that `resolve_principal`
+and tenant isolation behave exactly as in production:
+
+| Header | Default | Claim |
+|---|---|---|
+| `X-Demo-Role` | `platform_admin` | `cognito:groups` |
+| `X-Demo-Tenant` | `demo-a` for `client_*` / `executive` / `demo` | `custom:tenant_id` |
+
+Anyone can claim any role here, which is why the server only ever binds to
+`127.0.0.1`. The roles are still enforced: a `client_security` principal of
+tenant `demo-b` gets a real **403** on tenant `demo-a`.
+
+```bash
+curl -s http://127.0.0.1:8000/v1/tenants | head -c 200
+curl -s 'http://127.0.0.1:8000/v1/findings?tenant_id=demo-b'
+curl -s http://127.0.0.1:8000/v1/tenants/demo-a/kpis
+curl -s -H 'X-Demo-Role: client_security' -H 'X-Demo-Tenant: demo-b' \
+     http://127.0.0.1:8000/v1/tenants/demo-a     # -> 403
+```
+
+KPI and budget routes read the current month in production; the frozen dataset
+covers **October 2026**, so the demo server pins `period`/`month` to the dataset
+month unless the caller passes one explicitly. An explicit parameter always wins.
+
+### What this mode does NOT show
+
+- **No real AWS Continuum test.** The Security Agent client is faked: no
+  penetration test runs, no task-hour is consumed, nothing is billed.
+- **The anti-billing guard stays on.** `free_tier_only=True` and the demo tenants
+  have `free_tier_confirmed=False`, so `POST /v1/applications/{id}/runs` returns
+  **402** on purpose (see `docs/free-tier-runbook.md`). The local demo cannot
+  trigger a billable test even by accident.
+- No Cognito, DynamoDB, S3, Step Functions, GitHub or SES: everything lives in
+  memory and is **lost on restart**.
+- Two listing routes are not in the chapter-14 contract yet
+  (`GET /v1/tenants/{id}/applications`, `GET /v1/tenants/{id}/reports`), so the
+  Tenant and Reports pages report the API error in API mode instead of inventing
+  rows. They render normally in offline mode. The store methods behind them
+  already exist; exposing them is a backend follow-up.
+
+Full details, options and the test list: [`scripts/README-local-demo.md`](../scripts/README-local-demo.md).
+
 ## Reproducing the tests locally
 
 ```bash

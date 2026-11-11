@@ -82,6 +82,10 @@ def collect_findings(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
                 existing.status = "reopened"
                 existing.updated_at = iso(utcnow())
                 existing.closed_at = None
+                # La preuve de fermeture doit disparaître avec elle : garder
+                # `closed_by_run_id` sur une faille rouverte laisserait croire
+                # qu'un retest l'a validée alors qu'elle est réapparue.
+                existing.closed_by_run_id = None
                 deps.store.save_finding(existing)
                 regressions += 1
             else:

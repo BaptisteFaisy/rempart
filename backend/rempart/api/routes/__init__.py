@@ -12,6 +12,7 @@ from . import (
     onboarding,
     reports,
     runs,
+    settings,
     tenants,
 )
 
@@ -26,6 +27,7 @@ _ROUTE_MODULES = (
     reports,
     budget,
     audit,
+    settings,
 )
 
 

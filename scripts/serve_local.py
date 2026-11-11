@@ -334,6 +334,9 @@ def run_check(dataset: dict[str, list[dict[str, Any]]]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    # Sortie non tamponnée : le résumé est visible même derrière un redirect
+    # (nohup, CI, journal de démonstration).
+    sys.stdout.reconfigure(line_buffering=True)
     dataset = load_dataset(args.dataset)
     if args.check:
         return run_check(dataset)

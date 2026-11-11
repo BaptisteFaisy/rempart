@@ -247,3 +247,25 @@ The acceptance test suite validates the end-to-end functionality, security bound
   - Automated: `backend/tests/api/test_runs.py::test_launch_run_rejected_without_mandate`
 
 _Process check v2: full CI (backend, portal, demo, iac) + Mergify queue._
+
+---
+
+### ENF-PERF-01: Triage Throughput (50 findings < 5 minutes)
+- **Objective**: Validate **ENF-PERF-01** (Cahier des charges, chapter 10): triage of 50 findings completes in under 5 minutes, with portal pages served in under 2 seconds.
+- **Preconditions**: In-memory test doubles only (`FakeStore`, `FakeSecurityAgentClient`, `FakeGitHub`); no network, no AWS, deterministic 50-finding batch (mixed severities/confidences/risk types/entry points, including duplicates and one regression).
+- **Execution Steps**:
+  1. Run the measured chain `collect_findings` → `run_triage` → `enforce` on the 50-finding batch (`time.perf_counter()`, best of 5 runs, seeding excluded).
+  2. Run `compute_kpis` and `freeze_month` on a realistic month (5 applications, 50 runs, 200 findings).
+  3. Measure the marginal cost of `find_by_fingerprint` at 50 and 200 known findings.
+- **Expected Outcome**:
+  - Full triage of 50 findings under a 1.0 s test threshold — measured **2.5 ms** on the reference machine, i.e. ~100,000× under the 5-minute contractual budget (threshold rationale: 300 s would detect no regression at all).
+  - Accuracy preserved at volume: all 50 raw findings accounted for (47 created + 2 duplicates + 1 regression), one finding per fingerprint, no duplicate ticket, regression detected, Critical/High still queued for human validation.
+  - `compute_kpis` under 0.5 s (**measured 1.0 ms**) and `freeze_month` under 2.0 s (**measured 2.3 ms**), with figures matching an independent recomputation (ENF-IA-01).
+  - Documented, not fixed: `find_by_fingerprint` and `guardrails._check_regression` are linear in the stored volume (O(n × base)); `list_findings` default `limit=100` can silently truncate duplicate/regression lookups.
+- **Not covered here**: the portal 2-second page latency (front-end + network + API, to be measured on the deployed portal) and the real duration of a Continuum/Security Agent test (AWS-dependent).
+- **Verification Mapping**:
+  - Automated: `backend/tests/performance/test_triage_throughput.py::test_enf_perf_01_triage_of_50_findings_meets_budget`
+  - Automated: `backend/tests/performance/test_triage_throughput.py::test_fingerprint_lookup_cost_stays_bounded_when_volume_grows`
+  - Automated: `backend/tests/performance/test_kpis_throughput.py::test_compute_kpis_on_200_findings_meets_budget`
+  - Reference: `backend/tests/performance/README.md` (measured figures, thresholds and rationale, optimization leads)
+

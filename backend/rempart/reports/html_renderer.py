@@ -73,13 +73,17 @@ def _render_apps_table_html(items: list[dict[str, Any]]) -> str:
 
 
 
-def _html_head(period: str) -> str:
-    """Return the document head with the inline stylesheet (print-friendly)."""
+def _html_head(period: str, doc_kind: str = "Rapport mensuel") -> str:
+    """Return the document head with the inline stylesheet (print-friendly).
+
+    ``doc_kind`` lets other exports (e.g. the evidence pack, EF-RAP-04) reuse
+    the exact same stylesheet without duplicating it.
+    """
     return f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8"/>
-<title>Rempart - Rapport mensuel {html.escape(period)}</title>
+<title>Rempart - {html.escape(doc_kind)} {html.escape(period)}</title>
 <style>
   body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
          margin: 24px auto; max-width: 960px; color: #0f172a; line-height: 1.5; }}

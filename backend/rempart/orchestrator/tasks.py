@@ -331,8 +331,13 @@ def request_remediation(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
     started: list[str] = []
     for finding_id in payload.get("confirmed", []) or payload.get("queued", []):
         finding = deps.store.get_finding(finding_id)
-        if finding is None or finding.remediation_pr_url or finding.status == "in_remediation":
+        if finding is None or finding.remediation_pr_url:
             continue
+        # NB : ne surtout pas exclure `status == "in_remediation"`. C'est
+        # précisément l'état posé par create_tickets (cycle de vie § 11.5 :
+        # Confirmée → En correction). L'exclure faisait que la pull request de
+        # correction n'était JAMAIS demandée dans le parcours normal — bug
+        # trouvé par le test de parcours complet.
         resp = deps.sa.start_code_remediation(
             space_id,
             [finding.finding_id],

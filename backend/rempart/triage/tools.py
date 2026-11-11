@@ -5,6 +5,7 @@ from typing import Any
 
 from rempart.common.models import Application, Decision, Finding
 
+from .memory import finding_ids_with_fingerprint
 from .proposal import TriageProposal
 
 ALLOWED_PROPOSED_STATUSES = ("CONFIRMED", "TO_VERIFY", "LIKELY_FALSE_POSITIVE")
@@ -96,8 +97,31 @@ def get_finding_detail(ctx: TriageContext, finding_id: str) -> dict[str, Any]:
     return {}
 
 
-def get_past_decisions(ctx: TriageContext, app_id: str) -> list[dict[str, Any]]:
-    """Retrieve historical triage and analyst decisions for the application."""
+def _store_decisions(ctx: TriageContext, app_id: str) -> list[dict[str, Any]]:
+    """Decisions stored for the application's known and incoming findings."""
+    res: list[dict[str, Any]] = []
+    if ctx.store is None or not hasattr(ctx.store, "list_decisions"):
+        return res
+    seen_fids: set[str] = set()
+    for f in [*ctx.known_findings, *ctx.findings]:
+        if f.app_id == app_id and f.finding_id not in seen_fids:
+            seen_fids.add(f.finding_id)
+            for d in ctx.store.list_decisions(f.finding_id):
+                res.append(d.to_item())
+    return res
+
+
+def get_past_decisions(
+    ctx: TriageContext,
+    app_id: str,
+    *,
+    fingerprint: str | None = None,
+) -> list[dict[str, Any]]:
+    """Retrieve historical triage and analyst decisions for the application.
+
+    With ``fingerprint`` (EF-TRI-09), restrict the result to decisions taken on
+    findings of this application carrying that fingerprint.
+    """
     if not isinstance(app_id, str) or not app_id:
         raise ValueError("app_id must be a non-empty string")
     app = _require_app(ctx)
@@ -105,11 +129,7 @@ def get_past_decisions(ctx: TriageContext, app_id: str) -> list[dict[str, Any]]:
         return []
 
     res: list[dict[str, Any]] = [d.to_item() for d in ctx.past_decisions]
-    if ctx.store is not None and hasattr(ctx.store, "list_decisions"):
-        for f in ctx.known_findings:
-            if f.app_id == app_id:
-                for d in ctx.store.list_decisions(f.finding_id):
-                    res.append(d.to_item())
+    res.extend(_store_decisions(ctx, app_id))
 
     seen: set[str] = set()
     deduped: list[dict[str, Any]] = []
@@ -118,6 +138,12 @@ def get_past_decisions(ctx: TriageContext, app_id: str) -> list[dict[str, Any]]:
         if did and did not in seen:
             seen.add(did)
             deduped.append(it)
+
+    if fingerprint is not None:
+        allowed = finding_ids_with_fingerprint(
+            app_id, fingerprint, [*ctx.known_findings, *ctx.findings], ctx.store
+        )
+        deduped = [it for it in deduped if it.get("finding_id") in allowed]
     return deduped
 
 

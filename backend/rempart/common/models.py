@@ -1,6 +1,6 @@
 """Data models for Rempart."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Self
 
 PLANS = ("essentiel", "continu", "critique")
@@ -53,6 +53,9 @@ class Tenant(_ItemMixin):
     # Éligibilité au free tier AWS Continuum confirmée dans la console : tant
     # que ce n'est pas vrai, le garde-fou refuse de lancer un test réel.
     free_tier_confirmed: bool = False
+    # Politique de correction paramétrable par contrat (EF-ADM-01) : délais,
+    # surcharges de matrice, seuil de blocage, tarif horaire. Vide = défauts.
+    policy: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
