@@ -39,6 +39,8 @@ class Settings:
     # confirmée, et un plafond d'heures-tâches par test.
     free_tier_only: bool = True
     max_task_hours_per_test: float = 5.0
+    # EF-ORC-05 : quota AWS de tests simultanés par compte et par région.
+    concurrent_test_quota: int = 5
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -52,4 +54,7 @@ class Settings:
             sa_endpoint_url=os.environ.get("REMPART_SA_ENDPOINT_URL") or None,
             free_tier_only=_bool("REMPART_FREE_TIER_ONLY", True),
             max_task_hours_per_test=_float("REMPART_MAX_TASK_HOURS_PER_TEST", 5.0),
+            concurrent_test_quota=int(
+                _float("REMPART_CONCURRENT_TEST_QUOTA", 5.0)
+            ),
         )

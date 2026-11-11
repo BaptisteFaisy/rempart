@@ -15,7 +15,6 @@ from typing import Any
 
 from rempart.common.budget import (
     BudgetVerdict,
-    check_budget,
     consume,
     estimate_cost,
 )
@@ -28,6 +27,7 @@ from rempart.common.models import (
 from rempart.common.timeutil import iso, parse_iso, utcnow
 
 from .findings_intake import collect_findings  # noqa: F401  (ré-export)
+from .gates import budget_gate  # noqa: F401  (ré-export)
 from .task_types import (
     TERMINAL_STATUSES,
     Deps,
@@ -42,102 +42,8 @@ from .task_types import (
     tenant_of as _tenant_of,
 )
 from .triage_dispatch import apply_proposals, load_findings, run_proposals
-from .windows import is_within_window
 
 
-# --------------------------------------------------------------------------- #
-# 1. Budget gate (R8, R12) + fenêtres de test (EF-ORC-08)
-# --------------------------------------------------------------------------- #
-def _test_kind(payload: dict[str, Any]) -> str:
-    """Type du test visé : ``delivery`` (porte CI/CD) ou ``full`` (test complet).
-
-    ``kind`` vient du payload quand la machine à états le porte ; un
-    déclenchement CI/CD est la porte de livraison (la découverte ne suit que
-    des configurations ``delivery``). Dans le doute, le test est traité comme
-    complet : en production, il exigera une fenêtre plutôt que de passer.
-    """
-    kind = str(payload.get("kind") or "").strip().lower()
-    if kind:
-        return kind
-    return "delivery" if payload.get("trigger") == "cicd" else "full"
-
-
-def _refuse_outside_window(
-    payload: dict[str, Any], deps: Deps, now: datetime | None
-) -> dict[str, Any] | None:
-    """EF-ORC-08 : refuse un test complet en production hors fenêtre convenue.
-
-    Renvoie le payload de refus, ou ``None`` quand le test peut partir. Les
-    tests en préproduction et la porte CI/CD (``delivery``) ne sont pas
-    concernés : bloquer une livraison n'attend pas une fenêtre. L'instant
-    évalué est injectable (``now`` ou ``payload["moment"]``) pour des tests
-    déterministes ; à défaut, l'heure UTC courante.
-    """
-    app_id = str(payload.get("app_id") or "")
-    app = _app_of(deps, app_id)
-    environment = str(
-        payload.get("environment") or (app.environment if app else "") or ""
-    ).strip().lower()
-    if _test_kind(payload) != "full" or environment != "production":
-        return None
-
-    moment = now
-    if moment is None:
-        moment = parse_iso(str(payload["moment"])) if payload.get("moment") else utcnow()
-    windows = app.test_windows if app else []
-    if is_within_window(windows, moment, environment=environment):
-        return None
-
-    deps.store.append_audit(
-        "orchestrator", "run.refused_outside_window", "app", app_id, "denied"
-    )
-    return {**payload, "allowed": False, "reason": "outside_test_window"}
-
-
-def budget_gate(
-    payload: dict[str, Any], deps: Deps, now: datetime | None = None
-) -> dict[str, Any]:
-    """Refuse to start a test without a valid mandate or with an exhausted budget."""
-    tenant_id = payload["tenant_id"]
-    tenant = _tenant_of(deps, tenant_id)
-    if tenant is None:
-        return {**payload, "allowed": False, "reason": "unknown_tenant"}
-
-    if tenant.mandate_status != "valid":
-        deps.store.append_audit(
-            "orchestrator", "run.refused_mandate", "tenant", tenant_id, "denied"
-        )
-        return {**payload, "allowed": False, "reason": "mandate_invalid"}
-
-    if deps.settings.free_tier_only and not tenant.free_tier_confirmed:
-        # Garde-fou anti-facture : hors free tier, une heure-tâche coûte 50 $.
-        # Tant que l'éligibilité n'est pas confirmée dans la console, aucun test.
-        deps.store.append_audit(
-            "orchestrator", "run.refused_free_tier", "tenant", tenant_id, "denied"
-        )
-        return {**payload, "allowed": False, "reason": "free_tier_not_confirmed"}
-
-    refused = _refuse_outside_window(payload, deps, now)
-    if refused is not None:
-        return refused
-
-    state = deps.store.get_budget(tenant_id, _month_now())
-    verdict = check_budget(state, tenant.monthly_budget_hours, deps.settings.hourly_rate)
-    if not verdict.allowed:
-        deps.store.append_audit(
-            "orchestrator", "run.refused_budget", "tenant", tenant_id, "denied"
-        )
-        return {
-            **payload,
-            "allowed": False,
-            "reason": "budget_exceeded",
-            "budget_pct": verdict.pct,
-        }
-    return {**payload, "allowed": True, "budget_pct": verdict.pct}
-
-
-# --------------------------------------------------------------------------- #
-# 2. Start run
 # --------------------------------------------------------------------------- #
 def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
     """Start the Security Agent pentest job and record the run."""
