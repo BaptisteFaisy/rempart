@@ -245,3 +245,8 @@ The acceptance test suite validates the end-to-end functionality, security bound
 - **Verification Mapping**:
   - Automated: `backend/tests/orchestrator/test_tasks.py::test_budget_gate_rejects_missing_mandate`
   - Automated: `backend/tests/api/test_runs.py::test_launch_run_rejected_without_mandate`
+
+---
+
+_Process check: this line verifies the pull-request pipeline (CI checks +
+Mergify auto-queue) end to end._
