@@ -180,6 +180,19 @@ This repository implements rigorous delivery and governance standards:
 
 ---
 
+## 🏁 Hackathon Submission
+
+AWS MSP AI Hackathon — Track 2, *Deliver AI-Driven Outcomes for Customers*.
+Submission deadline: **Friday 11 December 2026, 12:00 PT**.
+
+- [Devpost submission text](docs/devpost-submission.md) — ready to paste into the form
+- [Submission checklist](docs/submission-checklist.md) — official § 18.1 items, honest statuses and remaining blockers
+- [Test instructions for judges](docs/judging-test-instructions.md) — 10-minute guided tour, demo credentials, fallback path
+- [Video script](docs/video-script.md) — 3 minutes, timed shot by shot (recording is done by the team)
+- [AWS Continuum API verification](docs/api-verification.md) — action-by-action check against the official API reference, and the pricing trap we avoided
+
+---
+
 ## 📚 References & Resources
 
 - [High-Level Design (HLD)](docs/HLD.md)
