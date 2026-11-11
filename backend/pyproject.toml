@@ -9,3 +9,9 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Gabarits de rapport : le HTML/CSS et les libelles PDF sont des litteraux
+# sur une seule ligne ; les couper cassait le rendu (longueur de ligne
+# non fonctionnelle ici).
+"rempart/reports/monthly.py" = ["E501"]

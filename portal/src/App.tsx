@@ -1,0 +1,50 @@
+import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { Tenant } from './types';
+import { portalApi } from './api/service';
+import { useSession } from './hooks/useSession';
+import { Navbar } from './components/Navbar';
+import { DemoBanner } from './components/DemoBanner';
+import { Login } from './pages/Login';
+import { Fleet } from './pages/Fleet';
+import { TenantPage } from './pages/Tenant';
+import { ApplicationPage } from './pages/Application';
+import { RunPage } from './pages/Run';
+import { FindingPage } from './pages/Finding';
+import { TriageQueue } from './pages/TriageQueue';
+import { Reports } from './pages/Reports';
+import { Budget } from './pages/Budget';
+
+export function App() {
+  const { session } = useSession();
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+
+  useEffect(() => {
+    portalApi.getTenants().then(setTenants).catch(() => {});
+  }, []);
+
+  const isDemo = session.role === 'demo';
+
+  return (
+    <div className="app-layout">
+      {isDemo ? <DemoBanner /> : null}
+      <Navbar tenants={tenants} />
+      <main>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/fleet" element={<Fleet />} />
+          <Route path="/tenants/:tenantId" element={<TenantPage />} />
+          <Route path="/applications/:appId" element={<ApplicationPage />} />
+          <Route path="/runs/:runId" element={<RunPage />} />
+          <Route path="/findings/:findingId" element={<FindingPage />} />
+          <Route path="/triage" element={<TriageQueue />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/budget" element={<Budget />} />
+          <Route path="*" element={<Navigate to="/fleet" replace />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
+export default App;

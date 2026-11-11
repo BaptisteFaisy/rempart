@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Rempart client-account resources (IAM roles, log group, budget)"
+
+Parameters:
+  MspAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: "AWS account ID of the Rempart MSP control plane"
+
+  MspOrchestratorRoleName:
+    Type: String
+    Default: "rempart-orchestrator"
+    Description: "Role name of the MSP orchestrator executing runs"
+
+  ExternalId:
+    Type: String
+    MinLength: 16
+    NoEcho: true
+    Description: "Shared secret external ID for STS AssumeRole condition"
+
+  GitHubOrg:
+    Type: String
+    Description: "GitHub organization or user owning the target repositories"
+
+  GitHubRepo:
+    Type: String
+    Description: "GitHub repository name or wildcard (e.g. '*' or 'my-app')"
+
+Resources:
+  RempartOpsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "rempart-ops-role"
+      Description: "Allows Rempart MSP orchestrator to trigger and inspect security agent tests"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${MspAccountId}:role/${MspOrchestratorRoleName}"
+            Action: "sts:AssumeRole"
+            Condition:
+              StringEquals:
+                "sts:ExternalId": !Ref ExternalId
+      Policies:
+        - PolicyName: "RempartSecurityAgentPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "PilotageDesTests"
+                Effect: Allow
+                Action:
+                  - "securityagent:StartPentestJob"
+                  - "securityagent:StopPentestJob"
+                  - "securityagent:BatchGetPentestJobs"
+                  - "securityagent:ListFindings"
+                  - "securityagent:BatchGetFindings"
+                  - "securityagent:ListIntegratedResources"
+                  - "securityagent:ListPentestJobsForPentest"
+                  - "securityagent:ListPentestJobTasks"
+                  - "securityagent:BatchGetPentestJobTasks"
+                  - "securityagent:ListPentests"
+                  - "securityagent:BatchGetPentests"
+                  - "securityagent:ListDiscoveredEndpoints"
+                  - "securityagent:UpdateFinding"
+                  - "securityagent:StartCodeRemediation"
+                  - "securityagent:ListAgentSpaces"
+                  - "securityagent:BatchGetAgentSpaces"
+                Resource: "*"
+
+  GitHubOidcRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "rempart-github-oidc-role"
+      Description: "Allows GitHub Actions workflows in the client repo to invoke Rempart gate"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+              StringLike:
+                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubOrg}/${GitHubRepo}:*"
+      Policies:
+        - PolicyName: "RempartPipelineTriggerPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !GetAtt PipelineLogGroup.Arn
+
+  PipelineLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: "/rempart/pipeline"
+      RetentionInDays: 400
+
+  ClientMonthlyBudget:
+    Type: "AWS::Budgets::Budget"
+    Properties:
+      Budget:
+        BudgetName: "rempart-monthly-pentest-budget"
+        BudgetType: "COST"
+        TimeUnit: "MONTHLY"
+        BudgetLimit:
+          Amount: 1000
+          Unit: "USD"
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: "ACTUAL"
+            ComparisonOperator: "GREATER_THAN"
+            Threshold: 50
+            ThresholdType: "PERCENTAGE"
+          Subscribers:
+            - SubscriptionType: "SNS"
+              Address: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:rempart-budget-alerts"
+        - Notification:
+            NotificationType: "ACTUAL"
+            ComparisonOperator: "GREATER_THAN"
+            Threshold: 80
+            ThresholdType: "PERCENTAGE"
+          Subscribers:
+            - SubscriptionType: "SNS"
+              Address: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:rempart-budget-alerts"
+        - Notification:
+            NotificationType: "ACTUAL"
+            ComparisonOperator: "GREATER_THAN"
+            Threshold: 100
+            ThresholdType: "PERCENTAGE"
+          Subscribers:
+            - SubscriptionType: "SNS"
+              Address: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:rempart-budget-alerts"
+
+Outputs:
+  OpsRoleArn:
+    Description: "ARN of the Rempart operations role assumed by the MSP orchestrator"
+    Value: !GetAtt RempartOpsRole.Arn
+
+  GitHubOidcRoleArn:
+    Description: "ARN of the GitHub Actions OIDC role"
+    Value: !GetAtt GitHubOidcRole.Arn
+
+  ExternalId:
+    Description: "External ID required when assuming the OpsRole"
+    Value: !Ref ExternalId
