@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import aws_cdk as cdk
 import aws_cdk.aws_dynamodb as ddb
-import aws_cdk.aws_kms as kms
 from constructs import Construct
 
-from ._helpers import DEFAULT_TABLE_PREFIX, create_encrypted_table, create_kms_key
+from ._helpers import DEFAULT_TABLE_PREFIX, create_encrypted_table
 
 TABLE_SPECS: list[tuple[str, str, str, list[tuple[str, str, str | None]]]] = [
     ("TenantsTable", "tenants", "tenant_id", []),
@@ -47,9 +46,10 @@ class StorageStack(cdk.Stack):
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
         self.table_prefix = table_prefix
-        self.kms_key: kms.Key = create_kms_key(
-            self, "RempartStorageKey", alias="alias/rempart/storage"
-        )
+        # Option A « 0 € strict » : chiffrement AWS-managed (gratuit). La clé
+        # customer-managed à 1 $/mois reste possible plus tard en réactivant
+        # create_kms_key — décision user du 11 nov 2026.
+        self.kms_key = None
         self.tables: dict[str, ddb.Table] = {}
         self._create_all_tables()
 
@@ -86,5 +86,5 @@ class StorageStack(cdk.Stack):
             table_name=f"{self.table_prefix}{logical_name}",
             partition_key=partition_key,
             sort_key=sort_key,
-            encryption_key=self.kms_key,
+            encryption_key=self.kms_key or None,
         )
