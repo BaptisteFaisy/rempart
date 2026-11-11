@@ -38,6 +38,45 @@ def _from_ddb(val: Any) -> Any:
     return val
 
 
+DEFAULT_RETENTION_MONTHS = 13
+SECONDS_PER_DAY = 86_400
+DAYS_PER_MONTH = 30.4375  # 365.25 / 12 : assez précis pour une rétention
+EXPIRE_AT_ATTRIBUTE = "expire_at"
+
+
+def ttl_epoch(created_at: str | None, retention_months: int = DEFAULT_RETENTION_MONTHS) -> int:
+    """Instant (epoch secondes) où DynamoDB TTL doit supprimer l'élément.
+
+    ENF-DATA-01 : conservation de 13 mois par défaut. Sans ``created_at``
+    lisible, on part de maintenant — mieux vaut une date de péremption que
+    pas du tout, sinon l'élément ne serait jamais purgé.
+    """
+    try:
+        base = parse_iso(created_at) if created_at else utcnow()
+    except ValueError:
+        base = utcnow()
+    return int(base.timestamp() + retention_months * DAYS_PER_MONTH * SECONDS_PER_DAY)
+
+
+def contract_end_epoch(months: int = 1) -> int:
+    """Échéance de suppression en fin de contrat : 30 jours (ENF-DATA-01)."""
+    return int(utcnow().timestamp() + months * DAYS_PER_MONTH * SECONDS_PER_DAY)
+
+
+def _with_ttl(entity: Any, retention_months: int) -> dict[str, Any]:
+    """Sérialise une entité et lui ajoute l'attribut TTL attendu par DynamoDB.
+
+    Un ``expire_at`` déjà présent n'est jamais écrasé : la suppression
+    anticipée en fin de contrat doit rester possible.
+    """
+    item = _to_ddb(entity.to_item())
+    if EXPIRE_AT_ATTRIBUTE not in item:
+        item[EXPIRE_AT_ATTRIBUTE] = ttl_epoch(
+            getattr(entity, "created_at", None), retention_months
+        )
+    return item
+
+
 def audit_in_range(created_at: str, since: str | None, until: str | None) -> bool:
     """Return True when ``created_at`` falls inside the inclusive [since, until] window.
 
@@ -56,9 +95,16 @@ def audit_in_range(created_at: str, since: str | None, until: str | None) -> boo
 class Store:
     """DynamoDB-backed persistence layer for Rempart."""
 
-    def __init__(self, ddb_resource: Any = None, table_prefix: str = "rempart-") -> None:
+    def __init__(
+        self,
+        ddb_resource: Any = None,
+        table_prefix: str = "rempart-",
+        retention_months: int = DEFAULT_RETENTION_MONTHS,
+    ) -> None:
         self._table_prefix = table_prefix
         self._ddb = ddb_resource
+        # ENF-DATA-01 : durée de conservation, appliquée à chaque écriture.
+        self._retention_months = retention_months
 
     def _get_resource(self) -> Any:
         if self._ddb is None:
@@ -70,8 +116,12 @@ class Store:
     def _table(self, name: str) -> Any:
         return self._get_resource().Table(f"{self._table_prefix}{name}")
 
+    def _item(self, entity: Any) -> dict[str, Any]:
+        """Sérialise une entité pour DynamoDB, avec son attribut TTL."""
+        return _with_ttl(entity, self._retention_months)
+
     def save_tenant(self, t: Tenant) -> Tenant:
-        self._table("tenants").put_item(Item=_to_ddb(t.to_item()))
+        self._table("tenants").put_item(Item=self._item(t))
         return t
 
     def get_tenant(self, tenant_id: str) -> Tenant | None:
@@ -84,7 +134,7 @@ class Store:
         return [Tenant.from_item(_from_ddb(it)) for it in res.get("Items", [])]
 
     def save_application(self, a: Application) -> Application:
-        self._table("applications").put_item(Item=_to_ddb(a.to_item()))
+        self._table("applications").put_item(Item=self._item(a))
         return a
 
     def get_application(self, app_id: str) -> Application | None:
@@ -100,7 +150,7 @@ class Store:
         return [Application.from_item(_from_ddb(it)) for it in items]
 
     def save_config(self, c: TestConfig) -> TestConfig:
-        self._table("test-configs").put_item(Item=_to_ddb(c.to_item()))
+        self._table("test-configs").put_item(Item=self._item(c))
         return c
 
     def list_configs(self, app_id: str) -> list[TestConfig]:
@@ -109,7 +159,7 @@ class Store:
         return [TestConfig.from_item(_from_ddb(it)) for it in items]
 
     def save_run(self, r: Run) -> Run:
-        self._table("runs").put_item(Item=_to_ddb(r.to_item()))
+        self._table("runs").put_item(Item=self._item(r))
         return r
 
     def get_run(self, run_id: str) -> Run | None:
@@ -135,7 +185,7 @@ class Store:
         return [Run.from_item(_from_ddb(it)) for it in items[:limit]]
 
     def save_finding(self, f: Finding) -> Finding:
-        self._table("findings").put_item(Item=_to_ddb(f.to_item()))
+        self._table("findings").put_item(Item=self._item(f))
         return f
 
     def get_finding(self, finding_id: str) -> Finding | None:
@@ -171,7 +221,7 @@ class Store:
         return None
 
     def save_decision(self, d: Decision) -> Decision:
-        self._table("decisions").put_item(Item=_to_ddb(d.to_item()))
+        self._table("decisions").put_item(Item=self._item(d))
         return d
 
     def list_decisions(self, finding_id: str) -> list[Decision]:
@@ -180,7 +230,7 @@ class Store:
         return [Decision.from_item(_from_ddb(it)) for it in items]
 
     def save_report(self, r: Report) -> Report:
-        self._table("reports").put_item(Item=_to_ddb(r.to_item()))
+        self._table("reports").put_item(Item=self._item(r))
         return r
 
     def get_report(self, report_id: str) -> Report | None:
@@ -209,8 +259,23 @@ class Store:
     def save_budget(self, b: BudgetState) -> BudgetState:
         item = b.to_item()
         item["pk"] = f"{b.tenant_id}#{b.month}"
+        item.setdefault(EXPIRE_AT_ATTRIBUTE, ttl_epoch(f"{b.month}-01T00:00:00Z",
+                                                       self._retention_months))
         self._table("budget").put_item(Item=_to_ddb(item))
         return b
+
+    def set_expire_at(self, table: str, key: dict[str, Any], epoch: int) -> None:
+        """Pose une échéance de purge explicite (fin de contrat : 30 jours).
+
+        Les écritures métier (`save_*`) recalculent toujours `expire_at` à
+        13 mois ; la suppression anticipée exigée par ENF-DATA-01 passe par ici.
+        """
+        self._table(table).update_item(
+            Key=key,
+            UpdateExpression=f"SET #{EXPIRE_AT_ATTRIBUTE} = :ttl",
+            ExpressionAttributeNames={f"#{EXPIRE_AT_ATTRIBUTE}": EXPIRE_AT_ATTRIBUTE},
+            ExpressionAttributeValues={":ttl": epoch},
+        )
 
     def append_audit(
         self,
@@ -229,7 +294,7 @@ class Store:
             result=result,
             created_at=iso(utcnow()),
         )
-        self._table("audit").put_item(Item=_to_ddb(evt.to_item()))
+        self._table("audit").put_item(Item=self._item(evt))
         return evt
 
     def list_audit(

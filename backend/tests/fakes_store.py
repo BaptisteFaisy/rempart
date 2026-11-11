@@ -14,8 +14,21 @@ from rempart.common.models import (
     Tenant,
     TestConfig,
 )
-from rempart.common.store import audit_in_range
+from rempart.common.store import DEFAULT_RETENTION_MONTHS, audit_in_range
 from rempart.common.timeutil import iso, utcnow
+
+
+def _parse_set_expression(expression: str) -> list[tuple[str, str]]:
+    """Extrait les paires (nom, valeur) d'une expression ``SET #a = :b, …``."""
+    if not expression.upper().startswith("SET"):
+        return []
+    pairs = []
+    for part in expression[3:].split(","):
+        if "=" not in part:
+            continue
+        name, value = (side.strip() for side in part.split("=", 1))
+        pairs.append((name, value))
+    return pairs
 
 
 class FakeDdbTable:
@@ -34,6 +47,22 @@ class FakeDdbTable:
         for it in reversed(self.items):
             if all(it.get(k) == v for k, v in Key.items()):
                 return {"Item": dict(it)}
+        return {}
+
+    def update_item(self, Key: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        """Applique un ``SET`` simple sur l'élément trouvé (suffisant pour le TTL).
+
+        Ne simule pas tout DynamoDB : gère ``ExpressionAttributeNames`` +
+        ``ExpressionAttributeValues`` avec une expression ``SET #n = :v``.
+        """
+        names = kwargs.get("ExpressionAttributeNames") or {}
+        values = kwargs.get("ExpressionAttributeValues") or {}
+        updates = {names.get(k, k.lstrip("#")): values.get(v, v)
+                   for k, v in _parse_set_expression(kwargs.get("UpdateExpression", ""))}
+        for it in self.items:
+            if all(it.get(k) == v for k, v in Key.items()):
+                it.update(updates)
+                return {}
         return {}
 
     def scan(self, **kwargs: Any) -> dict[str, Any]:
@@ -58,7 +87,13 @@ class FakeDdbResource:
 class FakeStore:
     """Dict-backed in-memory store exposing the exact same public API as Store."""
 
-    def __init__(self, ddb_resource: Any = None, table_prefix: str = "rempart-") -> None:
+    def __init__(
+        self,
+        ddb_resource: Any = None,
+        table_prefix: str = "rempart-",
+        retention_months: int = DEFAULT_RETENTION_MONTHS,
+    ) -> None:
+        self.retention_months = retention_months
         self.tenants: dict[str, Tenant] = {}
         self.applications: dict[str, Application] = {}
         self.configs: dict[str, TestConfig] = {}
@@ -68,6 +103,7 @@ class FakeStore:
         self.reports: dict[str, Report] = {}
         self.budgets: dict[str, BudgetState] = {}
         self.audits: list[AuditEvent] = []
+        self.expiries: dict[tuple[str, tuple], int] = {}
 
     def save_tenant(self, t: Tenant) -> Tenant:
         self.tenants[t.tenant_id] = t
@@ -187,6 +223,14 @@ class FakeStore:
         key = f"{b.tenant_id}#{b.month}"
         self.budgets[key] = b
         return b
+
+    def set_expire_at(self, table: str, key: dict[str, Any], epoch: int) -> None:
+        """Même contrat que ``Store.set_expire_at`` (purge anticipée).
+
+        Le fake n'a pas de moteur TTL : il enregistre l'échéance demandée dans
+        ``self.expiries`` pour qu'un test puisse la vérifier.
+        """
+        self.expiries[(table, tuple(sorted(key.items())))] = epoch
 
     def append_audit(
         self,

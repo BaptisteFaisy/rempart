@@ -73,7 +73,7 @@ def _render_apps_table_html(items: list[dict[str, Any]]) -> str:
 
 
 
-def _html_head(period: str, doc_kind: str = "Rapport mensuel") -> str:
+def html_head(period: str, doc_kind: str = "Rapport mensuel") -> str:
     """Return the document head with the inline stylesheet (print-friendly).
 
     ``doc_kind`` lets other exports (e.g. the evidence pack, EF-RAP-04) reuse
@@ -207,7 +207,7 @@ def generate_html_report(
     """Generate the full HTML report matching the 9 items of Annexe C."""
     recs = "".join(f"<li>{html.escape(r)}</li>" for r in frozen.get("recommendations", []))
     sections = [
-        _html_head(period),
+        html_head(period),
         _html_header(tenant_id, period, frozen),
         _html_summary_section(summary),
         _html_kpis_section(frozen),

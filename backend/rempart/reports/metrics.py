@@ -249,7 +249,7 @@ def risk_level(scope: Scope) -> str:
 # --------------------------------------------------------------------------- #
 # Deterministic detail blocks (Annexe C)
 # --------------------------------------------------------------------------- #
-def _app_label(scope: Scope, app_id: str) -> str:
+def app_label(scope: Scope, app_id: str) -> str:
     """Human readable application label with a safe fallback."""
     app = scope.apps_by_id.get(app_id)
     return app.name if app else app_id
@@ -274,7 +274,7 @@ def closed_findings_detail(scope: Scope) -> list[dict[str, Any]]:
                 "finding_id": finding.finding_id,
                 "title": finding.title,
                 "priority": finding.priority,
-                "application": _app_label(scope, finding.app_id),
+                "application": app_label(scope, finding.app_id),
                 "closed_at": finding.closed_at,
                 "proof": proof or "",
             }
@@ -295,7 +295,7 @@ def overdue_findings_detail(scope: Scope, reference: datetime) -> list[dict[str,
                 "finding_id": finding.finding_id,
                 "title": finding.title,
                 "priority": finding.priority,
-                "application": _app_label(scope, finding.app_id),
+                "application": app_label(scope, finding.app_id),
                 "owner": app.team if app else "",
                 "due_at": finding.due_at,
                 "new_target_date": finding.due_at,
