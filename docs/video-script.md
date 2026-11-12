@@ -88,7 +88,7 @@ the words *proof of closure* on camera.
 | The architecture diagram from the HLD, animated in two layers: customer account, then MSP control plane. | "Continuum runs in the customer account because AWS caps integrations at twenty per account and region, and concurrent tests at five. One account per customer is the only model that scales — and it keeps each customer's findings and their test bill inside their own account." | `20 integrations · 5 concurrent tests · per account per region` |
 | Terminal: `cdk deploy` output summary, then the client template being deployed in a fresh account. | "The control plane is AWS CDK. A new customer is one CloudFormation template." | `1 template = 1 customer` |
 | Terminal: the test suite running green. | "Two hundred and fifty-two automated tests. Every job in CI answers in under five minutes, enforced by a guard that fails the build otherwise." | `252 tests · CI ≤ 5 min` |
-| End card. | "Rempart: the penetration test becomes a subscription, with a remediation deadline and proof of closure." | `Rempart · github.com/BaptisteFaisy/rempart` |
+| End card. | "Rempart: the penetration test becomes a subscription, with a remediation deadline and proof of closure." | `Rempart · github.com/Tradoooo/rempart` |
 
 ---
 

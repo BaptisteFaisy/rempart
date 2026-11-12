@@ -16,7 +16,7 @@
 |---|---|---|---|
 | 1 | Track 2 selected, AWS AI service named | **to do** (form) | Text ready: [`devpost-submission.md`](devpost-submission.md). Service to name: AWS Continuum (penetration testing) + Amazon Bedrock via Strands Agents on AgentCore Runtime. |
 | 2 | Description in English: features, problem, measured outcomes | **done** | [`devpost-submission.md`](devpost-submission.md) § Description, How we built it, three measured outcomes. |
-| 3 | Public URL of the portal, with demo credentials in the test instructions | **done** | Two live URLs, both free: **https://d1o2xnfrq8xomh.cloudfront.net** (CloudFront + S3, deployed stack `RempartPortalStack`, measured HTTP 200 on `/`, on the JS/CSS assets and on the deep route `/fleet`) and **https://baptistefaisy.github.io/rempart/** (GitHub Pages). Both serve the **offline demo mode** on the frozen dataset — no real customer data on a public URL, and the portal says so with a banner. Real Cognito sign-in is not active yet: the user pool `eu-north-1_VkUAsvgSR` has **no Cognito domain** and the client has no callback URLs, so the PKCE flow cannot run. The 4 steps to enable it are written in [`portal-deployment.md`](portal-deployment.md). |
+| 3 | Public URL of the portal, with demo credentials in the test instructions | **done** | Two live URLs, both free: **https://d1o2xnfrq8xomh.cloudfront.net** (CloudFront + S3, deployed stack `RempartPortalStack`, measured HTTP 200 on `/`, on the JS/CSS assets and on the deep route `/fleet`) and **https://tradoooo.github.io/rempart/** (GitHub Pages). Both serve the **offline demo mode** on the frozen dataset — no real customer data on a public URL, and the portal says so with a banner. Real Cognito sign-in is not active yet: the user pool `eu-north-1_VkUAsvgSR` has **no Cognito domain** and the client has no callback URLs, so the PKCE flow cannot run. The 4 steps to enable it are written in [`portal-deployment.md`](portal-deployment.md). |
 | 4 | Private repo shared with `testing@devpost.com` and `aws-msp@amazon.com` | **decision needed** | The repository is currently **public** (it was created private; the visibility changed outside this work). The specification asks for a *private* repo shared with the two judge accounts. A public repo is generally accepted by Devpost, but it exposes the French specification — commercial strategy, pricing hypotheses, schedule. **Your call**: keep it public, or set it back to private (GitHub Pages keeps working on a Pro plan) and invite the judge accounts at submission time. |
 | 5 | The code really calls an AWS AI service at runtime | **blocked** | Calls are written and unit-tested against the official API reference ([`docs/api-verification.md`](api-verification.md)), but never executed against AWS. Needs credentials + one real `StartPentestJob`. Note: the free trial starts at the **first** pentest — the spec (§ 16.2) says do not run it before **23 November 2026** so the 2-month trial still covers judging on 22 January 2027. |
 | 6 | Video ~3 minutes, public on YouTube, English, no third-party brand or music | **out of scope for the agent** | Script written and timed: [`video-script.md`](video-script.md). The user records and edits. |
@@ -64,9 +64,9 @@
 ## Command for item 4 (run at submission time)
 
 ```bash
-gh api repos/BaptisteFaisy/rempart/collaborators/testing-devpost \
+gh api repos/Tradoooo/rempart/collaborators/testing-devpost \
   -X PUT -f permission=pull
-gh api repos/BaptisteFaisy/rempart/collaborators/aws-msp \
+gh api repos/Tradoooo/rempart/collaborators/aws-msp \
   -X PUT -f permission=pull
 ```
 
