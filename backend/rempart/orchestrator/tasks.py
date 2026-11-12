@@ -18,7 +18,7 @@ from rempart.common.budget import (
     consume,
     estimate_cost,
 )
-from rempart.common.fingerprint import fingerprint as make_fingerprint
+from rempart.common.fingerprint import finding_fingerprint
 from rempart.common.models import (
     Finding,
     Run,
@@ -26,7 +26,7 @@ from rempart.common.models import (
 )
 from rempart.common.timeutil import iso, parse_iso, utcnow
 
-from .findings_intake import collect_findings  # noqa: F401  (ré-export)
+from .findings_intake import collect_findings, fetch_findings  # noqa: F401  (ré-export)
 from .gates import budget_gate  # noqa: F401  (ré-export)
 from .task_types import (
     TERMINAL_STATUSES,
@@ -346,14 +346,14 @@ def close_or_reopen(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
         return {**payload, "error": "unknown_application"}
 
     run_id = payload.get("run_id") or payload.get("retest_run_id") or ""
+    # Même source d'empreinte que l'intake : sinon une faille détectée et sa
+    # réouverture n'auraient pas la même empreinte, et la détection de
+    # régression ne fonctionnerait pas.
     present = {
-        make_fingerprint(
-            app.app_id,
-            str(raw.get("riskType") or raw.get("risk_type") or "Unknown"),
-            str(raw.get("entryPoint") or raw.get("entry_point") or ""),
-            raw.get("parameter"),
+        finding_fingerprint(app.app_id, raw, detail)
+        for raw, detail in fetch_findings(
+            deps.sa, app.agent_space_id or "", run_id
         )
-        for raw in deps.sa.list_findings(app.agent_space_id or "", pentest_job_id=run_id)
     }
 
     closed: list[str] = []

@@ -25,7 +25,7 @@ from rempart.api.helpers import (
     require_principal,
 )
 from rempart.api.router import Router
-from rempart.reports.evidence import build_and_upload, build_evidence_pack
+from rempart.reports.evidence import build_and_upload, build_evidence_pack, seal_evidence_pack
 from rempart.reports.forecast import forecast_month
 from rempart.reports.industrialization import (
     alert_fatigue_indicators,
@@ -61,14 +61,24 @@ def _period(ctx: ApiContext) -> str:
 
 
 def get_evidence(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
-    """`GET /v1/tenants/{id}/evidence` — le dossier de preuves, non scellé."""
+    """`GET /v1/tenants/{id}/evidence` — le dossier de preuves, SCELLÉ.
+
+    Le dossier est renvoyé avec son empreinte SHA-256 (`integrity`), comme le
+    promet la page du portail (« scellé d'une empreinte SHA-256 que n'importe
+    tiers peut recalculer »). Sans scellement, la page affichait « Integrity
+    fingerprint — not available from the API » : la preuve était annoncée mais
+    jamais montrée.
+
+    L'empreinte porte sur le contenu probant ; `integrity` et `s3_key` en sont
+    exclus (ce sont des métadonnées ajoutées après le calcul).
+    """
     tenant_id, err = _authorized_tenant(ctx)
     if err or not tenant_id:
         return err  # type: ignore[return-value]
     pack = build_evidence_pack(
         store=get_store(ctx), tenant_id=tenant_id, period=_period(ctx)
     )
-    return 200, pack
+    return 200, seal_evidence_pack(pack)
 
 
 def post_evidence(ctx: ApiContext) -> tuple[int, dict[str, Any]]:

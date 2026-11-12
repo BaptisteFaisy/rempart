@@ -55,22 +55,27 @@ def test_pentest_job_ne_porte_pas_les_heures_consommees():
     assert "taskHours" in allowed_fields("TaskSummary")
 
 
-@pytest.mark.xfail(
-    reason="D3 ouvert : la vraie API ListFindings renvoie des FindingSummary sans "
-    "entryPoint/parameter/description, que le double invente encore (empreinte "
-    "dégénérée : 18 failles réelles sur 21 avalées comme doublons).",
-    strict=False,
-)
 def test_list_findings_ne_renvoie_que_des_champs_officiels():
+    """D3 : le double ne doit PLUS inventer `entryPoint`/`parameter`/`description`.
+
+    C'était précisément ce mensonge qui masquait l'empreinte dégénérée : la
+    vraie API ne renvoie que des `FindingSummary`, le double renvoyait des
+    champs d'un ancien modèle, et les tests passaient.
+    """
     sa = FakeSecurityAgentClient()
-    sa.add_finding(
+    sa.seed_finding(
         "job-1",
         severity="High",
         confidence="High",
         risk_type="SQL_INJECTION",
-        entry_point="/orders/{id}",
+        entry_point="src/api/orders.py",
     )
     rows = sa.list_findings("space-1", pentest_job_id="job-1")
     assert rows
     for row in rows:
         assert not set(row) - allowed_fields("FindingSummary")
+
+    details = sa.batch_get_findings("space-1", [rows[0]["findingId"]])
+    assert details
+    for detail in details:
+        assert not set(detail) - allowed_fields("Finding")

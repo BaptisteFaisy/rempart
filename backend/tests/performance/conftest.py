@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from rempart.common.fingerprint import fingerprint as make_fingerprint
+from rempart.common.fingerprint import finding_fingerprint
 from rempart.common.models import Application, Finding
 from rempart.orchestrator.findings_intake import collect_findings
 from rempart.orchestrator.task_types import Deps
@@ -218,8 +218,15 @@ def seed_known_finding(
         closed_at="2026-09-20T09:00:00Z" if status == "closed" else None,
     )
     # make_finding ne connaît que la faille « injection » : on aligne l'identité
-    # sur le triplet voulu pour que l'empreinte soit identique à celle de l'intake.
-    finding.fingerprint = make_fingerprint(APP_ID, risk_type, entry_point, parameter)
+    # sur le triplet voulu pour que l'empreinte soit identique à celle de
+    # l'intake. L'empreinte est calculée comme en production : sur l'emplacement
+    # réel du code (filePath:lignes), pas sur un `entryPoint`/`parameter` que la
+    # vraie API ne renvoie pas.
+    finding.fingerprint = finding_fingerprint(
+        APP_ID,
+        {"riskType": risk_type},
+        {"codeLocations": [{"filePath": entry_point, "lineStart": 1, "lineEnd": 1}]},
+    )
     finding.risk_type = risk_type
     finding.evidence = {"entry_point": entry_point, "parameter": parameter}
     return store.save_finding(finding)
