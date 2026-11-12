@@ -9,7 +9,8 @@ REGION="${REGION:-eu-north-1}"
 BUCKET="${BUCKET:-rempartportalstack-portalbucketf34416c0-eekv0qxwomo8}"
 DISTRIBUTION_ID="${DISTRIBUTION_ID:-EYN0KKBTR7INC}"
 AWS="${AWS:-$HOME/.local/bin/aws}"
-PORTAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/portal"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PORTAL_DIR="${REPO_ROOT}/portal"
 # Auth Cognito RÉELLE activée le 12/11/2026 (EF-POR-01) : domaine gratuit
 # https://rempart.auth.eu-north-1.amazoncognito.com + client public sans secret.
 # Valeurs publiques (aucun secret), surchargeables par l'environnement.
@@ -60,3 +61,40 @@ fi
 
 echo "OK — portail déployé : https://$("$AWS" cloudfront get-distribution --id "$DISTRIBUTION_ID" \
   --query 'Distribution.DomainName' --output text 2>/dev/null || echo "$DISTRIBUTION_ID (domaine à retrouver via aws cloudfront list-distributions)")"
+
+# ---- Preuve du déploiement ----------------------------------------------------
+# Un déploiement n'est « fait » que s'il est démontré : on compare l'empreinte
+# du bundle LOCAL à celle du bundle RÉELLEMENT servi par CloudFront, et on
+# affiche le commit déployé. Si les deux empreintes diffèrent, le site ne sert
+# pas ce qu'on vient de construire — et ça se voit tout de suite.
+echo "== Preuve du déploiement =="
+COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'inconnu')"
+LOCAL_BUNDLE="$(ls -1 "$PORTAL_DIR"/dist/assets/*.js 2>/dev/null | head -1)"
+DIST_DOMAIN="$("$AWS" cloudfront get-distribution --id "$DISTRIBUTION_ID" --query 'Distribution.DomainName' --output text 2>/dev/null || echo '')"
+if [ -n "$LOCAL_BUNDLE" ] && [ -n "$DIST_DOMAIN" ]; then
+  LOCAL_NAME="$(basename "$LOCAL_BUNDLE")"
+  LOCAL_SHA="$(sha256sum "$LOCAL_BUNDLE" | cut -d' ' -f1)"
+  SERVED_HTML="$(timeout 60 curl -s "https://$DIST_DOMAIN/")"
+  # On garde le chemin complet « assets/xxx.js » : sans le préfixe, l'URL
+  # tomberait sur le fallback SPA et renverrait du HTML (faux hash).
+  SERVED_NAME="$(printf '%s' "$SERVED_HTML" | grep -o 'assets/[A-Za-z0-9._-]*\.js' | head -1)"
+  if [ -n "$SERVED_NAME" ]; then
+    # `--compressed` : CloudFront sert le bundle compressé, on compare donc les
+    # octets DÉcompressés à ceux du fichier local, sinon les empreintes ne
+    # peuvent pas coïncider (faux négatif).
+    SERVED_SHA="$(timeout 90 curl -s --compressed "https://$DIST_DOMAIN/$SERVED_NAME" | sha256sum | cut -d' ' -f1)"
+  else
+    SERVED_SHA="(bundle non référencé par index.html)"
+  fi
+  echo "  commit déployé      : $COMMIT"
+  echo "  bundle local        : $LOCAL_NAME  sha256=$LOCAL_SHA"
+  echo "  bundle servi (live) : ${SERVED_NAME:-inconnu}  sha256=$SERVED_SHA"
+  if [ "$LOCAL_SHA" = "$SERVED_SHA" ]; then
+    echo "  PREUVE OK           : le site sert exactement le bundle construit"
+  else
+    echo "  PREUVE ÉCHEC        : le site sert autre chose (cache CloudFront ?)"
+  fi
+  echo "  page en ligne       : HTTP $(timeout 30 curl -s -o /dev/null -w '%{http_code}' "https://$DIST_DOMAIN/")"
+else
+  echo "  PREUVE incomplète   : bundle local ou domaine CloudFront introuvable"
+fi
