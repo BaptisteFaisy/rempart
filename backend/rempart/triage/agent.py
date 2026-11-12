@@ -4,6 +4,7 @@ from typing import Any
 
 from rempart.common.models import Application, Decision, Finding
 
+from . import verdict_cache
 from .guardrails import HIGH_SEVERITIES, compute_finding_priority, enforce
 from .memory import MemoryMatch, memory_match
 from .prompts import SYSTEM_PROMPT, format_finding_for_prompt
@@ -236,6 +237,13 @@ def _raw_proposals(
     correct et vérifiable.
     """
     if _strands_available() and _is_real_strands_model(model_client):
+        # Le modèle coûte du temps et de l'argent : un LOT déjà trié dans ce
+        # processus (rejeu Step Functions, dispatch exécuté deux fois) est
+        # réutilisé tel quel au lieu d'être rappelé.
+        fingerprints = [finding.fingerprint for finding in findings]
+        cached = verdict_cache.get_batch(fingerprints)
+        if cached is not None:
+            return cached
         try:
             raw_proposals = _run_strands_agent(ctx, model_client)
         except Exception:  # noqa: BLE001 — un modèle saturé ne doit pas casser le lot
@@ -244,6 +252,7 @@ def _raw_proposals(
             )
         for proposal in raw_proposals:
             proposal.source = "model"
+        verdict_cache.put_batch(fingerprints, raw_proposals)
         return raw_proposals
     return _deterministic_triage(
         findings, app, known_findings, past_decisions, store=store
