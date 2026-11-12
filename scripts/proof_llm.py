@@ -87,6 +87,15 @@ def main() -> int:
         print(f"     résumé            : {proposal.plain_summary[:160]}")
         print(f"     justification     : {proposal.justification[:220]}")
         print(f"     validation humaine: {proposal.needs_human_validation}")
+    from_model = [p for p in proposals if p.source == "model"]
+    if not from_model:
+        print(
+            "\n  ÉCHEC : une clé est configurée mais AUCUN verdict ne vient du modèle.\n"
+            "          (soit le modèle était indisponible et le règleur a pris le relais,\n"
+            "          soit le cache a renvoyé de vieux verdicts marqués autrement.)"
+        )
+        return 1
+    print(f"\n  ✓ {len(from_model)}/{len(proposals)} verdict(s) directement issus du modèle.")
     return 0
 
 

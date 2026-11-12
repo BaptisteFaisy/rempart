@@ -1,0 +1,52 @@
+name: selftest (Rempart s'analyse lui-même)
+
+# Auto-contrôle hebdomadaire : vrais scanners sur le vrai code, puis ingestion
+# par le vrai `collect_findings` avec l'assertion « aucune faille perdue ».
+# Le défaut D3 a motivé ce contrôle (18 failles sur 21 avalées comme doublons).
+#
+# Budget CI : ≤ 5 minutes (règle user 2026-10-24). Le pipeline est léger :
+# checkout + Python + Node + un script qui ne fait aucun appel AWS.
+
+on:
+  schedule:
+    - cron: "30 3 * * 1" # chaque lundi 03:30 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selftest
+  cancel-in-progress: true
+
+jobs:
+  selftest:
+    name: selftest (scanners réels → intake)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ci.txt
+
+      - name: Installer les dépendances du backend
+        run: pip install -r backend/requirements-ci.txt
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Self-test (scanners + intake)
+        run: python3 scripts/selftest.py
+        env:
+          PYTHONPATH: backend
