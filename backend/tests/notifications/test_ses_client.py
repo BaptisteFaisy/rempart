@@ -130,3 +130,36 @@ def test_region_defaults_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setitem(sys.modules, "boto3", _FakeBoto3)
     SesClient().send("a@acme.test", "S", "H", "T")
     assert captured["region_name"] == "eu-west-3"
+
+
+# --------------------------------------------------------------------------- #
+# Mode « adresse exacte » : le sandbox SES, gratuit (aucun domaine à acheter).
+# Une adresse exacte prime sur le domaine — c'est le mode utilisé quand on ne
+# possède pas de zone DNS, ce qui est le cas du déploiement de démonstration.
+# --------------------------------------------------------------------------- #
+def test_explicit_address_is_used_verbatim(monkeypatch):
+    monkeypatch.delenv("REMPART_SES_FROM_DOMAIN", raising=False)
+    monkeypatch.setenv("REMPART_SES_FROM_ADDRESS", "ops@msp.example")
+    assert SesClient().from_address == "ops@msp.example"
+
+
+def test_explicit_address_wins_over_domain(monkeypatch):
+    monkeypatch.setenv("REMPART_SES_FROM_DOMAIN", "msp.example")
+    monkeypatch.setenv("REMPART_SES_FROM_ADDRESS", "ops@msp.example")
+    assert SesClient().from_address == "ops@msp.example"
+
+
+def test_address_injected_in_constructor_wins_over_env(monkeypatch):
+    monkeypatch.setenv("REMPART_SES_FROM_ADDRESS", "env@msp.example")
+    client = SesClient(from_address="ctor@msp.example")
+    assert client.from_address == "ctor@msp.example"
+
+
+def test_missing_both_sources_explains_both_options(monkeypatch):
+    """Le message d'erreur doit nommer les DEUX variables, sinon on cherche."""
+    monkeypatch.delenv("REMPART_SES_FROM_ADDRESS", raising=False)
+    monkeypatch.delenv("REMPART_SES_FROM_DOMAIN", raising=False)
+    with pytest.raises(ValueError) as exc:
+        SesClient().from_address
+    assert "REMPART_SES_FROM_ADDRESS" in str(exc.value)
+    assert "REMPART_SES_FROM_DOMAIN" in str(exc.value)

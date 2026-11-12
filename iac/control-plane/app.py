@@ -57,7 +57,16 @@ def build_core_stacks(app: cdk.App, env: cdk.Environment) -> dict[str, Any]:
 def build_edge_stacks(app: cdk.App, env: cdk.Environment) -> None:
     """Portail statique et notifications : sans dépendance sur le cœur."""
     PortalStack(app, "RempartPortalStack", env=env)
-    NotificationsStack(app, "RempartNotificationsStack", env=env)
+    # Identité SES : aucune par défaut. `REMPART_SES_FROM_EMAIL` active le mode
+    # sandbox gratuit (une adresse vérifiée par e-mail, aucun domaine à acheter) ;
+    # `REMPART_SES_FROM_DOMAIN` active le mode production (zone DNS requise).
+    NotificationsStack(
+        app,
+        "RempartNotificationsStack",
+        env=env,
+        from_email=os.environ.get("REMPART_SES_FROM_EMAIL") or None,
+        from_domain=os.environ.get("REMPART_SES_FROM_DOMAIN") or None,
+    )
 
 
 def build_observability(

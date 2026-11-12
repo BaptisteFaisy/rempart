@@ -155,12 +155,19 @@ def test_synth_portal_stack():
 
 
 def test_synth_notifications_stack():
-    """Verify notifications stack contains SES identity/configuration and lambda."""
+    """Verify notifications stack contains SES configuration and lambda.
+
+    Par défaut AUCUNE identité SES n'est créée : on ne possède pas de domaine,
+    et une identité sur un domaine fictif resterait PENDING pour toujours
+    (et sa condition IAM `ses:FromAddress` bloquerait tout envoi). Le mode
+    sandbox (une adresse) et le mode domaine sont couverts par
+    `test_notifications.py`.
+    """
     app = build_app()
     app.synth()
     stack = app.node.find_child("RempartNotificationsStack")
     template = assertions.Template.from_stack(stack)
 
-    template.resource_count_is("AWS::SES::EmailIdentity", 1)
+    template.resource_count_is("AWS::SES::EmailIdentity", 0)
     template.resource_count_is("AWS::SES::ConfigurationSet", 1)
     template.resource_count_is("AWS::Lambda::Function", 1)

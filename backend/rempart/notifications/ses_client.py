@@ -23,11 +23,13 @@ class SesClient:
         self,
         boto_client: Any = None,
         *,
+        from_address: str | None = None,
         from_domain: str | None = None,
         configuration_set: str | None = None,
         region: str | None = None,
     ) -> None:
         self._client = boto_client
+        self._from_address = from_address
         self._from_domain = from_domain
         self._configuration_set = configuration_set
         self._region = region
@@ -44,10 +46,25 @@ class SesClient:
 
     @property
     def from_address(self) -> str:
-        """``noreply@<domaine>``, domaine lu dans l'environnement à l'appel."""
+        """Adresse d'expédition, lue dans l'environnement à l'appel.
+
+        Deux modes, du plus simple au plus complet :
+        - ``REMPART_SES_FROM_ADDRESS`` : une adresse exacte. C'est le mode
+          **sandbox SES** — aucune zone DNS à acheter, l'adresse se vérifie par
+          un simple clic sur l'e-mail reçu. Gratuit, et suffisant pour la
+          démonstration.
+        - ``REMPART_SES_FROM_DOMAIN`` : on en expédie depuis ``noreply@<domaine>``.
+          Nécessite de posséder le domaine et de publier l'enregistrement de
+          vérification DNS.
+        """
+        explicit = self._from_address or os.environ.get("REMPART_SES_FROM_ADDRESS")
+        if explicit:
+            return explicit
         domain = self._from_domain or os.environ.get("REMPART_SES_FROM_DOMAIN")
         if not domain:
-            raise ValueError("REMPART_SES_FROM_DOMAIN is not set")
+            raise ValueError(
+                "ni REMPART_SES_FROM_ADDRESS ni REMPART_SES_FROM_DOMAIN n'est défini"
+            )
         return f"noreply@{domain}"
 
     @property
