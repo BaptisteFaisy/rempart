@@ -7,7 +7,9 @@ from rempart.common.tenant import (
     Principal,
     authorize_read,
     authorize_write,
+    groups_from_claims,
     resolve_principal,
+    user_id_from_claims,
 )
 
 
@@ -83,3 +85,90 @@ def test_authorize_write_rules():
         with pytest.raises(AuthError) as exc:
             authorize_write(p, p.tenant_id or "tenant-a")
         assert exc.value.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# D8 — formes réelles de la claim `cognito:groups` (incident du 2026-11-12)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (["analyst"], ["analyst"]),
+        (["analyst", "client_dev"], ["analyst", "client_dev"]),
+        ("analyst", ["analyst"]),
+        ('["analyst"]', ["analyst"]),
+        ('["analyst", "client_dev"]', ["analyst", "client_dev"]),
+        ("analyst,client_dev", ["analyst", "client_dev"]),
+        (" analyst ", ["analyst"]),
+        (None, []),
+        ("", []),
+        ("   ", []),
+        ("[]", []),
+        ('["analyst"', []),
+        (42, []),
+        ({"role": "analyst"}, []),
+        ([None, "", "analyst"], ["analyst"]),
+    ],
+)
+def test_groups_from_claims_accepts_real_shapes_and_fails_closed(raw, expected):
+    """Liste, chaîne, chaîne JSON, CSV — et jamais d'interprétation hasardeuse."""
+    assert groups_from_claims(raw) == expected
+
+
+def test_groups_from_claims_never_yields_a_recognized_role_from_garbage():
+    """Une entrée inutilisable ne doit jamais produire un rôle connu."""
+    from rempart.common.tenant import ROLES
+
+    for raw in ('{"role": "analyst"}', '["platform_admin"', "platform_admin]", 42, object()):
+        assert not set(groups_from_claims(raw)) & set(ROLES), raw
+
+
+def test_resolve_principal_reads_a_json_encoded_groups_claim():
+    """Le cas réel qui cassait la production : chaîne JSON au lieu de liste."""
+    principal = resolve_principal(
+        {"sub": "u-1", "cognito:groups": '["platform_admin"]'}
+    )
+    assert principal.role == "platform_admin"
+    assert principal.user_id == "u-1"
+
+
+def test_resolve_principal_falls_back_to_username_claim():
+    principal = resolve_principal({"username": "u-2", "cognito:groups": ["analyst"]})
+    assert principal.user_id == "u-2"
+    assert principal.role == "analyst"
+
+
+def test_resolve_principal_prefers_sub_over_username():
+    principal = resolve_principal(
+        {"sub": "u-stable", "username": "u-alias", "cognito:groups": ["analyst"]}
+    )
+    assert principal.user_id == "u-stable"
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {},
+        {"sub": "u-3"},
+        {"sub": "u-3", "cognito:groups": '["pas-un-role"]'},
+        {"sub": "u-3", "cognito:groups": '["platform_admin"'},
+        {"username": "u-3", "cognito:groups": []},
+    ],
+)
+def test_resolve_principal_refuses_without_a_recognized_role(claims):
+    with pytest.raises(AuthError) as exc:
+        resolve_principal(claims)
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "claims,expected",
+    [
+        ({"sub": "s-1", "username": "u-1"}, "s-1"),
+        ({"username": "u-1"}, "u-1"),
+        ({"sub": ""}, None),
+        ({}, None),
+    ],
+)
+def test_user_id_from_claims_prefers_the_immutable_identifier(claims, expected):
+    assert user_id_from_claims(claims) == expected
