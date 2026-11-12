@@ -53,11 +53,33 @@ class BurnRate:
     hours_per_day: float
 
 
+def period_end(period: str) -> datetime:
+    """Dernier instant de la période (fin du mois, 23:59:59)."""
+    year, month = (int(part) for part in period.split("-")[:2])
+    start = _month_start(period)
+    last = days_in_month(year, month)
+    return start + timedelta(days=last - 1, hours=23, minutes=59, seconds=59)
+
+
+def evaluation_instant(period: str, as_of: datetime | None = None) -> datetime:
+    """Instant d'évaluation d'une période : la fin de la période, pas « maintenant ».
+
+    BUG CORRIGÉ (12 nov. 2026, trouvé en rendant la démo réaliste) : la
+    prévision d'une période **passée** était évaluée à l'heure courante. Pour
+    octobre, cela donnait 43 « jours écoulés » (le 12 novembre) au lieu de 31 :
+    le taux journalier, la projection de fin de mois et le coût projeté étaient
+    tous faux. On n'évalue jamais au-delà de la fin de la période.
+    """
+    if as_of is not None:
+        return as_of
+    return min(utcnow(), period_end(period))
+
+
 def daily_burn_rate(
     store: Store, *, tenant_id: str, period: str, as_of: datetime | None = None
 ) -> BurnRate:
     """Heures-tâches consommées par jour ÉCOULÉ (pas par jour du mois)."""
-    moment = as_of or utcnow()
+    moment = evaluation_instant(period, as_of)
     hours = sum(run.task_hours or 0.0 for run in _runs_of_month(store, tenant_id, period))
     start = _month_start(period)
     elapsed = max(1, (moment - start).days + 1)
@@ -147,7 +169,7 @@ def forecast_month(
     hourly_rate: float = 50.0,
 ) -> Forecast:
     """Projection de fin de mois et date de rupture du budget."""
-    moment = as_of or utcnow()
+    moment = evaluation_instant(period, as_of)
     burn = daily_burn_rate(store, tenant_id=tenant_id, period=period, as_of=moment)
     year, month = (int(part) for part in period.split("-")[:2])
     total_days = days_in_month(year, month)

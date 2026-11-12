@@ -239,6 +239,7 @@ class FakeStore:
         object_type: str,
         object_id: str,
         result: str = "ok",
+        created_at: str | None = None,
     ) -> AuditEvent:
         evt = AuditEvent(
             audit_id=f"audit-{uuid.uuid4().hex[:12]}",
@@ -247,10 +248,14 @@ class FakeStore:
             object_type=object_type,
             object_id=object_id,
             result=result,
-            created_at=iso(utcnow()),
+            created_at=created_at or iso(utcnow()),
         )
-        self.audits.append(evt)
-        return evt
+        return self.save_audit(evt)
+
+    def save_audit(self, event: AuditEvent) -> AuditEvent:
+        """Conserve un événement d'audit fourni (rejeu déterministe)."""
+        self.audits.append(event)
+        return event
 
     def list_audit(
         self,
