@@ -137,12 +137,22 @@ class Store:
         in-memory ``FakeDdbTable`` ignores the index and returns the whole
         table, so callers must keep their client-side filter afterwards: it is
         the authoritative filter and doubles as a no-op safety net in prod.
+
+        The loop follows ``LastEvaluatedKey``: DynamoDB answers at most 1 MB per
+        call, so a tenant above ~1 700 findings would otherwise be truncated
+        (see ``docs/scaling-analysis.md``).
         """
         cond = Key(pk).eq(pk_value)
         if sk is not None:
             cond = cond & Key(sk).eq(sk_value)
-        res = self._table(table).query(IndexName=index, KeyConditionExpression=cond)
-        return res.get("Items", [])
+        kwargs: dict[str, Any] = {"IndexName": index, "KeyConditionExpression": cond}
+        items: list[dict[str, Any]] = []
+        while True:
+            res = self._table(table).query(**kwargs)
+            items.extend(res.get("Items", []))
+            if "LastEvaluatedKey" not in res:
+                return items
+            kwargs["ExclusiveStartKey"] = res["LastEvaluatedKey"]
 
     def save_tenant(self, t: Tenant) -> Tenant:
         self._table("tenants").put_item(Item=self._item(t))

@@ -187,6 +187,11 @@ class MeasuringDdbTable(FakeDdbTable):
         self.items_scanned = 0
         self.items_queried = 0
 
+    def _matching(self, kwargs: dict[str, Any]) -> list[dict[str, Any]]:
+        """Items of the table matching the key condition of ``kwargs``."""
+        conditions = _key_conditions(kwargs.get("KeyConditionExpression"))
+        return [it for it in self.items if all(it.get(a) == v for a, v in conditions)]
+
     def scan(self, **kwargs: Any) -> dict[str, Any]:
         self.scan_calls += 1
         self.items_scanned += len(self.items)
@@ -194,10 +199,26 @@ class MeasuringDdbTable(FakeDdbTable):
 
     def query(self, **kwargs: Any) -> dict[str, Any]:
         self.query_calls += 1
-        conditions = _key_conditions(kwargs.get("KeyConditionExpression"))
-        matched = [it for it in self.items if all(it.get(a) == v for a, v in conditions)]
+        matched = self._matching(kwargs)
         self.items_queried += len(matched)
         return {"Items": [dict(it) for it in matched]}
+
+
+class PagedDdbTable(MeasuringDdbTable):
+    """Same table, capped at ``PAGE_SIZE`` items per answer (the real 1 MB cap)."""
+
+    PAGE_SIZE = 500
+
+    def query(self, **kwargs: Any) -> dict[str, Any]:
+        self.query_calls += 1
+        matched = self._matching(kwargs)
+        start = int(kwargs.get("ExclusiveStartKey", {}).get("offset", 0))
+        page = matched[start : start + self.PAGE_SIZE]
+        self.items_queried += len(page)
+        res: dict[str, Any] = {"Items": [dict(it) for it in page]}
+        if start + self.PAGE_SIZE < len(matched):
+            res["LastEvaluatedKey"] = {"offset": start + self.PAGE_SIZE}
+        return res
 
 
 class MeasuringDdbResource(FakeDdbResource):
@@ -206,6 +227,15 @@ class MeasuringDdbResource(FakeDdbResource):
     def Table(self, name: str) -> MeasuringDdbTable:  # noqa: N802 (boto3 API)
         if name not in self.tables:
             self.tables[name] = MeasuringDdbTable(name)
+        return self.tables[name]
+
+
+class PagedDdbResource(MeasuringDdbResource):
+    """Fake boto3 resource handing out :class:`PagedDdbTable`."""
+
+    def Table(self, name: str) -> MeasuringDdbTable:  # noqa: N802 (boto3 API)
+        if name not in self.tables:
+            self.tables[name] = PagedDdbTable(name)
         return self.tables[name]
 
 
@@ -401,3 +431,21 @@ def test_audit_period_read_remains_a_scan(measured_store):
 
     assert audit_table.scan_calls == 1
     assert audit_table.query_calls == 0
+
+
+def test_tenant_read_survives_the_one_megabyte_page_cap():
+    """A client with 2 000 findings is read whole, page after page."""
+    ddb = PagedDdbResource()
+    store = Store(ddb_resource=ddb, table_prefix="paged-")
+    for finding_index in range(2_000):
+        store.save_finding(_finding("t-99", finding_index % APPS_PER_TENANT, finding_index))
+    findings_table = ddb.Table("paged-findings")
+    findings_table.reset_counters()
+
+    findings = store.list_findings(tenant_id="t-99", limit=2_000)
+
+    assert len(findings) == 2_000
+    assert {f.tenant_id for f in findings} == {"t-99"}
+    assert findings_table.scan_calls == 0
+    assert findings_table.query_calls == 4
+    assert findings_table.items_queried == 2_000
