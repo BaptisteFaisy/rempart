@@ -130,6 +130,26 @@ class SecurityAgentClient:
         resp = self.client.batch_get_pentest_jobs(**body)
         return list(resp.get("pentestJobs", []))
 
+    def list_pentest_job_tasks(
+        self,
+        space_id: str,
+        pentest_job_id: str | None = None,
+        **kw: Any,
+    ) -> list[dict[str, Any]]:
+        """ListPentestJobTasks — requis : ``agentSpaceId``.
+
+        Liste documentée : ``taskSummaries``. C'est la SEULE source réelle des
+        heures-tâches consommées : le modèle officiel ne déclare ``taskHours``
+        que sur ``TaskSummary``/``Task``. ``PentestJob`` (renvoyé par
+        ``BatchGetPentestJobs``) ne porte que ``maxTaskHours``, un plafond.
+        """
+        body = {"agentSpaceId": space_id, **kw}
+        if pentest_job_id:
+            body["pentestJobId"] = pentest_job_id
+        require_params("ListPentestJobTasks", body, ("agentSpaceId",))
+        resp = self.client.list_pentest_job_tasks(**body)
+        return list(resp.get("taskSummaries", []))
+
     def list_pentests(self, space_id: str, **kw: Any) -> list[dict[str, Any]]:
         """ListPentests — requis : ``agentSpaceId``. Liste documentée : ``pentestSummaries``."""
         body = {"agentSpaceId": space_id, **kw}

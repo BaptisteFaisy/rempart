@@ -28,6 +28,12 @@ class _RecordingClient:
             "list_pentest_jobs_for_pentest": {
                 "pentestJobSummaries": [{"pentestJobId": "job-9"}]
             },
+            "list_pentest_job_tasks": {
+                "taskSummaries": [
+                    {"taskId": "task-1", "pentestJobId": "job-1", "taskHours": 0.75},
+                    {"taskId": "task-2", "pentestJobId": "job-1", "taskHours": 0.25},
+                ]
+            },
         }
 
     def __getattr__(self, name: str):
@@ -189,3 +195,26 @@ def test_client_is_lazy_when_no_boto_client_injected():
     """Aucun client boto3 n'est créé à l'import (les tests n'ont pas AWS)."""
     client = SecurityAgentClient()
     assert client._client is None
+
+
+def test_list_pentest_job_tasks_lit_task_summaries():
+    """SEULE source réelle des heures-tâches (D1) : `TaskSummary.taskHours`."""
+    client, boto = _client()
+    tasks = client.list_pentest_job_tasks("space-1", pentest_job_id="job-1")
+    assert [t["taskHours"] for t in tasks] == [0.75, 0.25]
+    assert boto.calls[-1] == (
+        "list_pentest_job_tasks",
+        {"agentSpaceId": "space-1", "pentestJobId": "job-1"},
+    )
+
+
+def test_list_pentest_job_tasks_exige_l_espace_d_agent():
+    client, _ = _client()
+    with pytest.raises(ValueError, match="agentSpaceId"):
+        client.list_pentest_job_tasks("")
+
+
+def test_list_pentest_job_tasks_sans_job_renvoie_toutes_les_taches():
+    client, boto = _client()
+    client.list_pentest_job_tasks("space-1")
+    assert boto.calls[-1] == ("list_pentest_job_tasks", {"agentSpaceId": "space-1"})

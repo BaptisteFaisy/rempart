@@ -1,0 +1,358 @@
+{
+  "provenance": {
+    "service": "securityagent",
+    "api_version": "2025-09-06",
+    "source": "modèle botocore officiel livré avec l'AWS CLI v2 (2.40.0) : awscli/botocore/data/securityagent/2025-09-06/service-2.json",
+    "reference_doc": "https://docs.aws.amazon.com/securityagent/latest/APIReference/API_Operations.html",
+    "retrieved_at": "2026-11-12",
+    "note": "Extrait figé (la CI n'a pas l'AWS CLI). Toute réponse d'un double de test DOIT se limiter aux champs listés ici ; les énumérations sont celles de la vraie API (MAJUSCULES)."
+  },
+  "operations": {
+    "ListFindings": {
+      "method": "POST",
+      "uri": "/ListFindings",
+      "input": "ListFindingsInput",
+      "output": "ListFindingsOutput"
+    },
+    "BatchGetFindings": {
+      "method": "POST",
+      "uri": "/BatchGetFindings",
+      "input": "BatchGetFindingsInput",
+      "output": "BatchGetFindingsOutput"
+    },
+    "StartPentestJob": {
+      "method": "POST",
+      "uri": "/StartPentestJob",
+      "input": "StartPentestJobInput",
+      "output": "StartPentestJobOutput"
+    },
+    "StopPentestJob": {
+      "method": "POST",
+      "uri": "/StopPentestJob",
+      "input": "StopPentestJobInput",
+      "output": "StopPentestJobOutput"
+    },
+    "BatchGetPentestJobs": {
+      "method": "POST",
+      "uri": "/BatchGetPentestJobs",
+      "input": "BatchGetPentestJobsInput",
+      "output": "BatchGetPentestJobsOutput"
+    },
+    "ListPentestJobTasks": {
+      "method": "POST",
+      "uri": "/ListPentestJobTasks",
+      "input": "ListPentestJobTasksInput",
+      "output": "ListPentestJobTasksOutput"
+    },
+    "BatchGetPentestJobTasks": {
+      "method": "POST",
+      "uri": "/BatchGetPentestJobTasks",
+      "input": "BatchGetPentestJobTasksInput",
+      "output": "BatchGetPentestJobTasksOutput"
+    },
+    "ListPentests": {
+      "method": "POST",
+      "uri": "/ListPentests",
+      "input": "ListPentestsInput",
+      "output": "ListPentestsOutput"
+    },
+    "ListPentestJobsForPentest": {
+      "method": "POST",
+      "uri": "/ListPentestJobsForPentest",
+      "input": "ListPentestJobsForPentestInput",
+      "output": "ListPentestJobsForPentestOutput"
+    },
+    "UpdateFinding": {
+      "method": "POST",
+      "uri": "/UpdateFinding",
+      "input": "UpdateFindingInput",
+      "output": "UpdateFindingOutput"
+    },
+    "StartCodeRemediation": {
+      "method": "POST",
+      "uri": "/StartCodeRemediation",
+      "input": "StartCodeRemediationInput",
+      "output": "StartCodeRemediationOutput"
+    },
+    "CreateAgentSpace": {
+      "method": "POST",
+      "uri": "/CreateAgentSpace",
+      "input": "CreateAgentSpaceInput",
+      "output": "CreateAgentSpaceOutput"
+    },
+    "CreateTargetDomain": {
+      "method": "POST",
+      "uri": "/CreateTargetDomain",
+      "input": "CreateTargetDomainInput",
+      "output": "CreateTargetDomainOutput"
+    },
+    "VerifyTargetDomain": {
+      "method": "POST",
+      "uri": "/VerifyTargetDomain",
+      "input": "VerifyTargetDomainInput",
+      "output": "VerifyTargetDomainOutput"
+    },
+    "CreatePentest": {
+      "method": "POST",
+      "uri": "/CreatePentest",
+      "input": "CreatePentestInput",
+      "output": "CreatePentestOutput"
+    }
+  },
+  "shapes": {
+    "FindingSummary": [
+      "agentSpaceId",
+      "codeReviewId",
+      "codeReviewJobId",
+      "confidence",
+      "createdAt",
+      "findingId",
+      "name",
+      "pentestId",
+      "pentestJobId",
+      "riskLevel",
+      "riskType",
+      "status",
+      "updatedAt",
+      "validationStatus"
+    ],
+    "Finding": [
+      "agentSpaceId",
+      "alignmentRationale",
+      "attackScript",
+      "codeLocations",
+      "codeRemediationTask",
+      "codeReviewId",
+      "codeReviewJobId",
+      "confidence",
+      "createdAt",
+      "customerNote",
+      "description",
+      "findingId",
+      "lastUpdatedBy",
+      "linkedIssue",
+      "name",
+      "originalFindingId",
+      "pentestId",
+      "pentestJobId",
+      "reasoning",
+      "remediationCode",
+      "revalidationJobIds",
+      "riskLevel",
+      "riskScore",
+      "riskType",
+      "status",
+      "taskId",
+      "updatedAt",
+      "validationStatus",
+      "verificationScript"
+    ],
+    "PentestJob": [
+      "actors",
+      "allowedDomains",
+      "cicdConfiguration",
+      "cleanUpStrategy",
+      "clientCertificates",
+      "codeRemediationStrategy",
+      "createdAt",
+      "disableManagedSkills",
+      "documents",
+      "endpoints",
+      "errorInformation",
+      "excludePaths",
+      "excludeRiskTypes",
+      "executionContext",
+      "integratedRepositories",
+      "jobType",
+      "logConfig",
+      "maxTaskHours",
+      "networkTrafficConfig",
+      "overview",
+      "pentestId",
+      "pentestJobId",
+      "reportDestination",
+      "reportUrl",
+      "scopeChanges",
+      "scopeResult",
+      "selectedFindingIds",
+      "serviceRole",
+      "sourceCode",
+      "status",
+      "steps",
+      "testScope",
+      "title",
+      "trustedCaCertificates",
+      "updatedAt",
+      "vpcConfig"
+    ],
+    "PentestJobSummary": [
+      "createdAt",
+      "jobType",
+      "pentestId",
+      "pentestJobId",
+      "reportUrl",
+      "status",
+      "title",
+      "updatedAt"
+    ],
+    "TaskSummary": [
+      "agentSpaceId",
+      "createdAt",
+      "executionStatus",
+      "pentestId",
+      "pentestJobId",
+      "riskType",
+      "taskHours",
+      "taskId",
+      "title",
+      "updatedAt"
+    ],
+    "Task": [
+      "agentSpaceId",
+      "categories",
+      "createdAt",
+      "description",
+      "executionStatus",
+      "logsLocation",
+      "pentestId",
+      "pentestJobId",
+      "riskType",
+      "targetEndpoint",
+      "taskHours",
+      "taskId",
+      "title",
+      "updatedAt"
+    ],
+    "ListFindingsOutput": [
+      "findingsSummaries",
+      "nextToken"
+    ],
+    "BatchGetFindingsOutput": [
+      "findings",
+      "notFound"
+    ],
+    "BatchGetPentestJobsOutput": [
+      "notFound",
+      "pentestJobs"
+    ],
+    "ListPentestJobTasksOutput": [
+      "nextToken",
+      "taskSummaries"
+    ],
+    "StartPentestJobOutput": [
+      "agentSpaceId",
+      "createdAt",
+      "pentestId",
+      "pentestJobId",
+      "status",
+      "title",
+      "updatedAt"
+    ],
+    "ListPentestJobTasksInput": [
+      "agentSpaceId",
+      "categoryName",
+      "maxResults",
+      "nextToken",
+      "pentestJobId",
+      "stepName"
+    ],
+    "BatchGetFindingsInput": [
+      "agentSpaceId",
+      "findingIds"
+    ],
+    "CodeLocation": [
+      "filePath",
+      "label",
+      "lineEnd",
+      "lineStart"
+    ]
+  },
+  "enums": {
+    "RiskLevel": {
+      "shape": "RiskLevel",
+      "values": [
+        "UNKNOWN",
+        "INFORMATIONAL",
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL"
+      ],
+      "type": "string"
+    },
+    "ConfidenceLevel": {
+      "shape": "ConfidenceLevel",
+      "values": [
+        "FALSE_POSITIVE",
+        "UNCONFIRMED",
+        "LOW",
+        "MEDIUM",
+        "HIGH"
+      ],
+      "type": "string"
+    },
+    "FindingStatus": {
+      "shape": "FindingStatus",
+      "values": [
+        "ACTIVE",
+        "RESOLVED",
+        "ACCEPTED",
+        "FALSE_POSITIVE"
+      ],
+      "type": "string"
+    },
+    "ValidationStatus": {
+      "shape": "ValidationStatus",
+      "values": [
+        "CONFIRMED",
+        "NOT_REPRODUCED",
+        "VALIDATION_FAILED",
+        "VALIDATING",
+        "NOT_VALIDATED"
+      ],
+      "type": "string"
+    },
+    "PentestJob.status": {
+      "shape": "JobStatus",
+      "values": [
+        "IN_PROGRESS",
+        "STOPPING",
+        "STOPPED",
+        "FAILED",
+        "COMPLETED"
+      ],
+      "type": "string"
+    },
+    "Task.executionStatus": {
+      "shape": "TaskExecutionStatus",
+      "values": [
+        "IN_PROGRESS",
+        "ABORTED",
+        "COMPLETED",
+        "INTERNAL_ERROR",
+        "FAILED"
+      ],
+      "type": "string"
+    },
+    "JobType": {
+      "shape": "JobType",
+      "values": [
+        "FULL",
+        "REVALIDATION",
+        "CICD"
+      ],
+      "type": "string"
+    },
+    "FindingSummary.riskType": {
+      "shape": "String",
+      "values": null,
+      "type": "string"
+    }
+  },
+  "list_members": {
+    "ListFindingsOutput.findingsSummaries": "FindingSummary",
+    "BatchGetFindingsOutput.findings": "Finding",
+    "BatchGetPentestJobsOutput.pentestJobs": "PentestJob",
+    "ListPentestJobTasksOutput.taskSummaries": "TaskSummary"
+  }
+}

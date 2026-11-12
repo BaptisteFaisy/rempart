@@ -52,8 +52,10 @@ class FakeSecurityAgentClient:
         self.findings_by_job: dict[str, list[dict[str, Any]]] = {}
         self.job_outcomes: dict[str, str] = {}  # pentestJobId -> COMPLETED | FAILED
         self.default_outcome = "COMPLETED"
+        # Réglage de scénario : les heures consommées d'UNE tâche du job.
+        # Exposées uniquement par `list_pentest_job_tasks` (forme réelle).
         self.task_hours = 1.5
-        self.duration_seconds = 3600.0
+        self.max_task_hours = 5.0
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     @staticmethod
@@ -138,6 +140,39 @@ class FakeSecurityAgentClient:
                                                 "pentestId": pentest_id, **kw}))
         return {"pentestJobId": job_id, "status": "RUNNING"}
 
+    def list_pentest_job_tasks(
+        self,
+        space_id: str,
+        pentest_job_id: str | None = None,
+        **kw: Any,
+    ) -> list[dict[str, Any]]:
+        """ListPentestJobTasks — SEULE source réelle des heures-tâches.
+
+        Renvoie des ``TaskSummary`` conformes au modèle officiel : `taskId`,
+        `pentestJobId`, `agentSpaceId`, `executionStatus`, `taskHours`.
+        """
+        self._require(
+            "ListPentestJobTasks", {"agentSpaceId": space_id}, ("agentSpaceId",)
+        )
+        job_ids = (
+            [pentest_job_id] if pentest_job_id else sorted(self.jobs)
+        )
+        summaries = []
+        for job_id in job_ids:
+            summaries.append(
+                {
+                    "taskId": f"task-{job_id}",
+                    "pentestJobId": job_id,
+                    "agentSpaceId": space_id,
+                    "executionStatus": "COMPLETED",
+                    "taskHours": self.task_hours,
+                }
+            )
+        self.calls.append(
+            ("list_pentest_job_tasks", {"agentSpaceId": space_id, "pentestJobId": pentest_job_id})
+        )
+        return summaries
+
     def stop_pentest_job(self, space_id: str, pentest_job_id: str) -> dict[str, Any]:
         self._require(
             "StopPentestJob",
@@ -158,11 +193,15 @@ class FakeSecurityAgentClient:
             status = self.job_outcomes.get(job_id, self.default_outcome)
             if job_id in self.jobs:
                 self.jobs[job_id]["status"] = status
+        # Forme fidèle au modèle officiel : `PentestJob` n'a NI `taskHours`
+        # (seulement `maxTaskHours`, un plafond) NI `durationSeconds`. Les heures
+        # consommées vivent sur `TaskSummary.taskHours`, rendu par
+        # `list_pentest_job_tasks` ci-dessous. Un double qui invente un champ
+        # masque le défaut en production : c'est exactement ce qui s'est passé.
         view = {
             "pentestJobId": job_id,
             "status": status,
-            "taskHours": self.task_hours,
-            "durationSeconds": self.duration_seconds,
+            "maxTaskHours": self.max_task_hours,
         }
         # Les horodatages posés par le scénario doivent survivre : la découverte
         # des tests CI/CD filtre sur `startedAt`.
