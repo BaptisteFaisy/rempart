@@ -55,7 +55,7 @@ def record_decision(deps: Deps, finding: Finding, proposal: Any) -> None:
             decision_id=f"dec-{uuid.uuid4().hex[:8]}",
             finding_id=finding.finding_id,
             author_type="agent",
-            author="triage-agent",
+            author=f"triage-agent:{getattr(proposal, 'source', 'deterministic')}",
             action=proposal.proposed_status,
             justification=proposal.justification,
             created_at=iso(utcnow()),

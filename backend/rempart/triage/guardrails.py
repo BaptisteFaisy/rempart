@@ -78,6 +78,16 @@ def _enforce_false_positive_rule(
     final_status = proposal.proposed_status
     final_needs_human = proposal.needs_human_validation or needs_validation
 
+    # EF-TRI-05 : un Critical ou un High n'est JAMAIS tranché seul par le
+    # modèle — quel que soit son verdict. Le chemin déterministe l'imposait
+    # déjà ; le chemin « vrai modèle » ne l'imposait QUE pour un faux positif,
+    # ce qui laissait un Critical CONFIRMÉ par le modèle passer sans
+    # validation humaine. Trouvé le 2026-11-12 en branchant un vrai modèle
+    # (InferHub) sur le triage : invisible tant que le triage était
+    # déterministe.
+    if finding.severity in HIGH_SEVERITIES:
+        final_needs_human = True
+
     if proposal.proposed_status == "LIKELY_FALSE_POSITIVE" and finding.severity in HIGH_SEVERITIES:
         logger.warning(
             "Guardrail EF-TRI-05/ENF-IA-02 triggered on %s: false positive on %s overridden.",
@@ -112,7 +122,8 @@ def enforce(
 
     1) Recompute priority deterministically via compute_priority. Matrix wins.
     2) EF-TRI-05 / ENF-IA-02: LIKELY_FALSE_POSITIVE on Critical/High severity forced
-       to TO_VERIFY with needs_human_validation = True.
+       to TO_VERIFY, and ANY Critical/High finding always requires human
+       validation — the model never settles one on its own.
     3) Regression detection: if finding fingerprint matches a previously closed finding,
        mark is_regression = True.
     """
@@ -133,4 +144,7 @@ def enforce(
         references=list(proposal.references),
         justification=proposal.justification,
         needs_human_validation=final_needs_human,
+        # L'origine du verdict survit aux garde-fous : sans cela, on ne
+        # saurait plus si le verdict vient d'un modèle ou du règleur.
+        source=getattr(proposal, "source", "deterministic"),
     )

@@ -28,6 +28,7 @@ def test_triage_proposal_to_dict_camelcase() -> None:
         "references",
         "justification",
         "needsHumanValidation",
+        "source",
     }
     assert d["findingId"] == "f-0123"
     assert d["duplicateOf"] is None
@@ -50,6 +51,7 @@ def test_triage_proposal_from_dict_roundtrip() -> None:
         "references": ["CWE-89"],
         "justification": "Détails.",
         "needsHumanValidation": False,
+        "source": "model",
     }
     p = TriageProposal.from_dict(raw)
     assert p.finding_id == "f-999"
@@ -57,6 +59,8 @@ def test_triage_proposal_from_dict_roundtrip() -> None:
     assert p.is_regression is True
     assert p.proposed_status == "TO_VERIFY"
     assert p.priority == "P2"
+    # La provenance du verdict fait partie du contrat sérialisé.
+    assert p.source == "model"
     assert p.to_dict() == raw
 
 

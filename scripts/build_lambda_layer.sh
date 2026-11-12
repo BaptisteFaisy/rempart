@@ -29,6 +29,9 @@ PACKAGES=(
   "fpdf2==2.9.0"
   "requests==2.34.2"
   "strands-agents==1.64.0"
+  # Client du modèle de triage (endpoint OpenAI-compatible) : sans lui, la
+  # Lambda ne peut pas appeler le LLM et le triage retombe sur le règleur.
+  "openai==3.50.0"
 )
 
 PIP="pip3"

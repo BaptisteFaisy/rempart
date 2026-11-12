@@ -51,6 +51,13 @@ def _github_token() -> str | None:
     return None
 
 
+def _model_client() -> Any:
+    """Client Strands du triage, ou ``None`` si aucun endpoint LLM n'est configuré."""
+    from rempart.triage.llm import build_model_client
+
+    return build_model_client()
+
+
 def _github_client(settings: Settings) -> GitHubClient | None:
     """Construit un ``GitHubClient`` seulement si un jeton est disponible."""
     token = _github_token()
@@ -74,6 +81,10 @@ def build_deps(settings: Settings | None = None) -> Deps:
         ),
         settings=settings,
         github=_github_client(settings),
+        # Modèle du triage : construit seulement si un endpoint LLM est
+        # configuré (REMPART_LLM_BASE_URL / REMPART_LLM_API_KEY). Sans lui,
+        # l'agent garde son repli déterministe — et la démo ne coûte rien.
+        model_client=_model_client(),
     )
 
 
