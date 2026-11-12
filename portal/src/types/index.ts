@@ -165,6 +165,8 @@ export interface BudgetPayload extends BudgetState {
   monthly_budget_hours?: number;
   budget_pct?: number;
   allowed?: boolean;
+  /** Coupe-circuit global : vrai quand aucun test ne peut démarrer. */
+  kill_switch?: boolean;
 }
 
 export interface Kpis {

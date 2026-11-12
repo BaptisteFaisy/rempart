@@ -78,12 +78,24 @@ def hourly_rate(ctx: ApiContext) -> float:
     """Resolve the configured hourly rate, falling back to the default."""
     return ctx.settings.hourly_rate if ctx.settings else DEFAULT_HOURLY_RATE
 
+def kill_switch_active(ctx: ApiContext) -> bool:
+    """Coupe-circuit global : vrai quand aucun test ne doit démarrer.
+
+    Exposé tel quel dans le payload du budget pour que le portail affiche le
+    bandeau d'arrêt ; hors contexte (settings absent), on retombe sur ``False``
+    comme tout réglage non configuré.
+    """
+    return bool(ctx.settings.kill_switch) if ctx.settings else False
+
 def budget_verdict(ctx: ApiContext, state: BudgetState, tenant: Tenant) -> BudgetVerdict:
     """Evaluate a budget state against the tenant's monthly allowance."""
     return check_budget(state, tenant.monthly_budget_hours, hourly_rate(ctx))
 
 def budget_payload(
-    state: BudgetState, tenant: Tenant, verdict: BudgetVerdict
+    state: BudgetState,
+    tenant: Tenant,
+    verdict: BudgetVerdict,
+    kill_switch: bool = False,
 ) -> dict[str, Any]:
     """Build the budget representation shared by GET and PUT /budget."""
     return {
@@ -92,6 +104,7 @@ def budget_payload(
         "budget_pct": verdict.pct,
         "allowed": verdict.allowed,
         "auto_stop": verdict.auto_stop,
+        "kill_switch": bool(kill_switch),
     }
 
 def parse_float(body: dict[str, Any], field: str) -> tuple[float | None, Response | None]:

@@ -87,6 +87,19 @@ def _refuse(
     return {**payload, "allowed": False, "reason": reason}
 
 
+def _refuse_kill_switch(
+    payload: dict[str, Any], deps: Deps, tenant_id: str
+) -> dict[str, Any] | None:
+    """Coupe-circuit global : quand il est levé, aucun test ne démarre (R8).
+
+    Indépendant du mandat, du free tier, du quota, de la fenêtre et du budget :
+    c'est un arrêt d'urgence côté exploitation, évalué avant tout autre garde.
+    """
+    if not deps.settings.kill_switch:
+        return None
+    return _refuse(payload, deps, tenant_id, "kill_switch", "run.refused_kill_switch")
+
+
 def _refuse_mandate(
     payload: dict[str, Any], deps: Deps, tenant: Tenant, tenant_id: str
 ) -> dict[str, Any] | None:
@@ -145,6 +158,13 @@ def budget_gate(
 ) -> dict[str, Any]:
     """Refuse to start a test without a valid mandate or with an exhausted budget."""
     tenant_id = payload["tenant_id"]
+
+    # Coupe-circuit global : évalué en tout premier, avant même la résolution
+    # du tenant — quand il est levé, rien ne part, quel que soit le contexte.
+    kill_switch = _refuse_kill_switch(payload, deps, tenant_id)
+    if kill_switch is not None:
+        return kill_switch
+
     tenant = _tenant_of(deps, tenant_id)
     if tenant is None:
         return {**payload, "allowed": False, "reason": "unknown_tenant"}
