@@ -27,6 +27,16 @@ def _float(name: str, default: float) -> float:
         return default
 
 
+def _origins(name: str) -> tuple[str, ...]:
+    """Liste d'origines séparées par des virgules, normalisée (sans `/` final)."""
+    raw = os.environ.get(name) or ""
+    return tuple(
+        origin[:-1] if origin.endswith("/") else origin
+        for origin in (part.strip() for part in raw.split(","))
+        if origin
+    )
+
+
 @dataclass
 class Settings:
     table_prefix: str = "rempart-"
@@ -35,6 +45,17 @@ class Settings:
     github_api: str = "https://api.github.com"
     github_owner: str = ""
     sa_endpoint_url: str | None = None
+    # EF-RAP-04 : bucket où le dossier de preuves est réellement téléversé.
+    # Absent = aucun stockage configuré : la route répond 501 au lieu de
+    # renvoyer 201 avec une clé S3 qui ne pointe vers rien.
+    reports_bucket: str | None = None
+    # Origines autorisées pour CORS (liste séparée par des virgules). Vide =
+    # comportement historique `*`, réservé au développement local
+    # (`scripts/serve_local.py`) : en production l'IaC pose la liste réelle.
+    cors_allow_origins: tuple[str, ...] = ()
+    # Clé partagée du webhook CI/CD (`POST /v1/events/deployment`). Jamais
+    # écrite en clair dans le template : l'IaC la lit depuis SSM.
+    pipeline_key: str | None = None
     # Garde-fou anti-facture : aucun test réel sans éligibilité free tier
     # confirmée, et un plafond d'heures-tâches par test.
     free_tier_only: bool = True
@@ -52,6 +73,9 @@ class Settings:
             github_api=os.environ.get("REMPART_GITHUB_API", "https://api.github.com"),
             github_owner=os.environ.get("REMPART_GITHUB_OWNER", ""),
             sa_endpoint_url=os.environ.get("REMPART_SA_ENDPOINT_URL") or None,
+            reports_bucket=os.environ.get("REMPART_REPORTS_BUCKET") or None,
+            cors_allow_origins=_origins("REMPART_CORS_ALLOW_ORIGINS"),
+            pipeline_key=os.environ.get("REMPART_PIPELINE_KEY") or None,
             free_tier_only=_bool("REMPART_FREE_TIER_ONLY", True),
             max_task_hours_per_test=_float("REMPART_MAX_TASK_HOURS_PER_TEST", 5.0),
             concurrent_test_quota=int(

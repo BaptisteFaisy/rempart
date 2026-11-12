@@ -78,9 +78,10 @@ interface AuditFiltersProps {
   draft: Filters;
   onDraft: (filters: Filters) => void;
   onApply: () => void;
+  onReset: () => void;
 }
 
-function AuditFilters({ draft, onDraft, onApply }: AuditFiltersProps) {
+function AuditFilters({ draft, onDraft, onApply, onReset }: AuditFiltersProps) {
   const fields: { id: string; label: string; key: keyof Filters }[] = [
     { id: 'audit-filter-action', label: 'Action', key: 'action' },
     { id: 'audit-filter-actor', label: 'Actor', key: 'actor' },
@@ -104,13 +105,7 @@ function AuditFilters({ draft, onDraft, onApply }: AuditFiltersProps) {
         <button className="btn btn-primary" onClick={onApply}>
           Apply filters
         </button>
-        <button
-          className="btn btn-secondary"
-          onClick={() => {
-            onDraft(EMPTY_FILTERS);
-            onApply();
-          }}
-        >
+        <button className="btn btn-secondary" onClick={onReset}>
           Reset
         </button>
       </div>

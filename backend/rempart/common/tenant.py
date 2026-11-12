@@ -1,5 +1,6 @@
 """Tenant isolation and RBAC authorization (EF-POR-01, ENF-SEC-01)."""
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,16 +30,68 @@ class Principal:
     tenant_id: str | None
 
 
+def _clean(items: Any) -> list[str]:
+    """Chaînes non vides d'une liste ; tout autre élément est écarté.
+
+    Un élément non textuel (``None``, ``42``, un dict) n'est jamais converti en
+    chaîne : ``str(None)`` produirait un « groupe » nommé ``None``, ce qui
+    n'existe pas et n'a aucune raison d'apparaître.
+    """
+    if not isinstance(items, (list, tuple)):
+        return []
+    return [item.strip() for item in items if isinstance(item, str) and item.strip()]
+
+
+def groups_from_claims(raw: Any) -> list[str]:
+    """Les groupes Cognito dans les TROIS formes réellement observées.
+
+    INCIDENT RÉEL (12 nov. 2026, compte 710332178565, API eu-north-1) : avec un
+    vrai jeton Cognito, l'API renvoyait 401 « Authentication required » alors
+    que l'autorisateur JWT avait laissé passer la requête. Le code ne gérait que
+    deux formes (`["platform_admin"]` et `"platform_admin"`) ; API Gateway peut
+    sérialiser une claim multi-valeurs en **chaîne JSON** —
+    ``'["platform_admin"]'`` — que `groups = [groups]` transformait en un groupe
+    nommé `'["platform_admin"]'`, donc aucun rôle reconnu. Aucune forme ne doit
+    être devinée : les trois sont acceptées, et toute valeur non reconnue donne
+    une liste vide (échec fermé, jamais d'élévation de privilège).
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        return _clean(raw)
+    if not isinstance(raw, str):
+        return []
+    text = raw.strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        try:
+            return _clean(json.loads(text))
+        except ValueError:
+            return []
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def user_id_from_claims(jwt_claims: dict[str, Any]) -> str | None:
+    """Identifiant stable du principal : `sub`, à défaut `username`.
+
+    Un access token Cognito porte les deux ; l'ordre ne doit pas être une
+    hypothèse, et `sub` reste préféré car c'est l'identifiant immuable.
+    """
+    for claim in ("sub", "username"):
+        value = jwt_claims.get(claim)
+        if value:
+            return str(value)
+    return None
+
+
 def resolve_principal(jwt_claims: dict[str, Any]) -> Principal:
     """Resolve authenticated principal from Cognito JWT claims."""
-    user_id = jwt_claims.get("sub")
+    user_id = user_id_from_claims(jwt_claims)
     if not user_id:
         raise AuthError("Missing 'sub' claim in JWT", status_code=401)
 
-    groups = jwt_claims.get("cognito:groups", [])
-    if isinstance(groups, str):
-        groups = [groups]
-
+    groups = groups_from_claims(jwt_claims.get("cognito:groups"))
     role = next((g for g in groups if g in ROLES), None)
     if role is None:
         raise AuthError("No recognized Rempart role in claims", status_code=401)
