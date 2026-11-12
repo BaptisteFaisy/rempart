@@ -118,6 +118,19 @@ def _claims_of(authorizer: dict[str, Any]) -> dict[str, Any]:
     return claims if isinstance(claims, dict) else {}
 
 
+def _shape_of(value: Any) -> str:
+    """Forme d'une claim, sans jamais en révéler le contenu.
+
+    Donne juste de quoi reconnaître le format transmis (longueur, premier
+    caractère, présence de guillemets) — suffisant pour diagnostiquer, assez
+    pauvre pour ne rien divulguer.
+    """
+    if not isinstance(value, str):
+        return type(value).__name__
+    first = value[:1] or "-"
+    return f"str(len={len(value)},first={first},quoted={'\"' in value})"
+
+
 def _log_authorizer_shape_once(authorizer: dict[str, Any]) -> None:
     """Journalise UNE fois par processus la FORME de l'authorizer.
 
@@ -132,12 +145,23 @@ def _log_authorizer_shape_once(authorizer: dict[str, Any]) -> None:
     _AUTHORIZER_SHAPE_LOGGED = True
     jwt = authorizer.get("jwt")
     claims = _claims_of(authorizer)
-    LOGGER.info(
-        "Forme de l'authorizer (clés uniquement) : authorizer=%s jwt=%s claims=%s groups=%s",
+    # `print` et non `LOGGER.info` : la Lambda n'émet pas les messages INFO par
+    # défaut (niveau WARNING), et ce diagnostic doit être lisible tel quel dans
+    # CloudWatch pour trancher en une lecture. Aucune VALEUR n'est imprimée.
+    print(
+        "REMPART_DIAG authorizer_keys="
+        f"{sorted(authorizer)} jwt_keys={sorted(jwt) if isinstance(jwt, dict) else None} "
+        f"claim_keys={sorted(claims)} "
+        f"groups_type={type(claims.get('cognito:groups')).__name__} "
+        f"groups_shape={_shape_of(claims.get('cognito:groups'))} "
+        f"has_sub={'sub' in claims}",
+        flush=True,
+    )
+    LOGGER.warning(
+        "Forme de l'authorizer (clés uniquement) : authorizer=%s jwt=%s claims=%s",
         sorted(authorizer),
         sorted(jwt) if isinstance(jwt, dict) else None,
         sorted(claims),
-        type(claims.get("cognito:groups")).__name__,
     )
 
 
