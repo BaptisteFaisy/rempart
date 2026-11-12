@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Tenant } from './types';
 import { portalApi } from './api/service';
 import { useSession } from './hooks/useSession';
+import { isCognitoEnabled } from './auth/cognito';
 import { Navbar } from './components/Navbar';
 import { DemoBanner } from './components/DemoBanner';
 import { Login } from './pages/Login';
@@ -23,11 +24,23 @@ export function App() {
   const { session } = useSession();
   const [tenants, setTenants] = useState<Tenant[]>([]);
 
-  useEffect(() => {
-    portalApi.getTenants().then(setTenants).catch(() => {});
-  }, []);
+  // Cognito activé = API hébergée = jeton OIDC obligatoire. Sans jeton, la
+  // session « démo » par défaut n'a AUCUN droit : l'API répond 401 et le
+  // navigateur bloque la réponse (preflight refusé) — le portail affichait
+  // « API unreachable (Failed to fetch) » au lieu de proposer la connexion.
+  const cognitoEnabled = isCognitoEnabled();
+  const authenticated = !cognitoEnabled || Boolean(session.token);
 
-  const isDemo = session.role === 'demo';
+  useEffect(() => {
+    if (!authenticated) return;
+    portalApi.getTenants().then(setTenants).catch(() => {});
+  }, [authenticated]);
+
+  if (cognitoEnabled && !authenticated) {
+    return <Login />;
+  }
+
+  const isDemo = session.role === 'demo' && !cognitoEnabled;
 
   return (
     <div className="app-layout">

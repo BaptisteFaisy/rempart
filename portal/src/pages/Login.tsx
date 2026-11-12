@@ -38,7 +38,10 @@ function DemoModeBanner() {
 function CognitoSignIn({ onSignIn, pending }: { onSignIn: () => void; pending: boolean }) {
   return (
     <div>
-      <DemoModeBanner />
+      {/* Pas de bandeau « mode démo » ici : Cognito EST configuré, c'est
+          précisément pour cela que cette page existe. L'annoncer comme
+          « demo mode » était le premier mot vu par un évaluateur sur le
+          portail déployé. */}
       <button
         type="button"
         className="btn btn-primary"

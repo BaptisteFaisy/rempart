@@ -42,18 +42,36 @@ def _clean(items: Any) -> list[str]:
     return [item.strip() for item in items if isinstance(item, str) and item.strip()]
 
 
+def _split_items(text: str) -> list[str]:
+    """Découpe une chaîne en éléments : crochets retirés, guillemets ignorés.
+
+    Couvre les formes réellement observées côté API Gateway pour une claim
+    multi-valeurs : ``platform_admin``, ``platform_admin,analyst``,
+    ``["platform_admin"]`` et ``[platform_admin]`` (crochets sans guillemets,
+    qui n'est PAS du JSON valide).
+    """
+    inner = text
+    if inner.startswith("[") and inner.endswith("]"):
+        inner = inner[1:-1]
+    return [item.strip().strip("\"'").strip() for item in inner.split(",")]
+
+
 def groups_from_claims(raw: Any) -> list[str]:
-    """Les groupes Cognito dans les TROIS formes réellement observées.
+    """Les groupes Cognito dans TOUTES les formes réellement transmises.
 
     INCIDENT RÉEL (12 nov. 2026, compte 710332178565, API eu-north-1) : avec un
-    vrai jeton Cognito, l'API renvoyait 401 « Authentication required » alors
-    que l'autorisateur JWT avait laissé passer la requête. Le code ne gérait que
-    deux formes (`["platform_admin"]` et `"platform_admin"`) ; API Gateway peut
-    sérialiser une claim multi-valeurs en **chaîne JSON** —
-    ``'["platform_admin"]'`` — que `groups = [groups]` transformait en un groupe
-    nommé `'["platform_admin"]'`, donc aucun rôle reconnu. Aucune forme ne doit
-    être devinée : les trois sont acceptées, et toute valeur non reconnue donne
-    une liste vide (échec fermé, jamais d'élévation de privilège).
+    vrai jeton Cognito, l'API répondait 401 « Authentication required » alors
+    que l'autorisateur JWT avait laissé passer la requête. Le diagnostic posé
+    dans `api/app.py` a tranché sur l'environnement déployé : les claims
+    arrivent bien sous `requestContext.authorizer.jwt.claims`, mais
+    `cognito:groups` y est une **chaîne**, pas une liste. L'ancien code faisait
+    `groups = [groups]`, donc le rôle cherché devenait la chaîne entière et
+    aucun rôle n'était reconnu.
+
+    Aucune forme n'est devinée : liste, chaîne simple, liste séparée par des
+    virgules, tableau JSON et tableau entre crochets sans guillemets sont
+    acceptés ; toute valeur non reconnue donne une liste vide (échec fermé,
+    jamais d'élévation de privilège).
     """
     if raw is None:
         return []
@@ -65,11 +83,16 @@ def groups_from_claims(raw: Any) -> list[str]:
     if not text:
         return []
     if text.startswith("["):
-        try:
-            return _clean(json.loads(text))
-        except ValueError:
+        if not text.endswith("]"):
+            # Liste malformée : échec fermé, aucune tentative de devinette.
             return []
-    return [part.strip() for part in text.split(",") if part.strip()]
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, list):
+            return _clean(parsed)
+    return [item for item in _split_items(text) if item]
 
 
 def user_id_from_claims(jwt_claims: dict[str, Any]) -> str | None:

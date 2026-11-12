@@ -99,6 +99,13 @@ def test_authorize_write_rules():
         ('["analyst"]', ["analyst"]),
         ('["analyst", "client_dev"]', ["analyst", "client_dev"]),
         ("analyst,client_dev", ["analyst", "client_dev"]),
+        ("[platform_admin]", ["platform_admin"]),
+        ("[platform_admin, analyst]", ["platform_admin", "analyst"]),
+        ('["platform_admin"]', ["platform_admin"]),
+        (" platform_admin , analyst ", ["platform_admin", "analyst"]),
+        ("[]", []),
+        ("[,]", []),
+        ('["analyst"', []),
         (" analyst ", ["analyst"]),
         (None, []),
         ("", []),
@@ -123,11 +130,19 @@ def test_groups_from_claims_never_yields_a_recognized_role_from_garbage():
         assert not set(groups_from_claims(raw)) & set(ROLES), raw
 
 
-def test_resolve_principal_reads_a_json_encoded_groups_claim():
-    """Le cas réel qui cassait la production : chaîne JSON au lieu de liste."""
-    principal = resolve_principal(
-        {"sub": "u-1", "cognito:groups": '["platform_admin"]'}
-    )
+@pytest.mark.parametrize(
+    "groups",
+    [
+        '["platform_admin"]',
+        "[platform_admin]",
+        "platform_admin",
+        "platform_admin,analyst",
+        ["platform_admin"],
+    ],
+)
+def test_resolve_principal_accepte_toutes_les_formes_reelles_de_groupes(groups):
+    """Le cas réel qui cassait la production : `cognito:groups` en chaîne."""
+    principal = resolve_principal({"sub": "u-1", "cognito:groups": groups})
     assert principal.role == "platform_admin"
     assert principal.user_id == "u-1"
 
