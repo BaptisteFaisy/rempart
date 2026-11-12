@@ -3,6 +3,7 @@
 import json
 
 from rempart.api.app import lambda_handler
+from rempart.common.config import Settings
 from rempart.common.models import Tenant
 from tests.api.conftest import (
     analyst_claims,
@@ -208,6 +209,42 @@ def test_deployment_event_rejects_bad_key():
         headers={"X-Rempart-Key": "wrong"},
     )
     assert resp["statusCode"] in (401, 403)
+
+
+def test_deployment_event_refusal_does_not_disclose_server_configuration(monkeypatch):
+    """Refus neutre : impossible de savoir si une clé est configurée ou non.
+
+    Constat réel du 2026-11-12 : l'API déployée répondait
+    « Clé pipeline non configurée côté serveur » à tout appelant non
+    authentifié. Les deux cas (absente / fausse) doivent être indiscernables ;
+    la cause exacte ne vit que dans le journal d'audit.
+    """
+    monkeypatch.delenv("REMPART_PIPELINE_KEY", raising=False)
+    store = seed_two_tenants()
+    unconfigured = lambda_handler(
+        make_event("POST", "/v1/events/deployment", body={"repository": "acme/shop"}),
+        None,
+        store=store,
+        sa=fake_sa(),
+        settings=Settings(),
+    )
+    wrong_key = lambda_handler(
+        make_event(
+            "POST",
+            "/v1/events/deployment",
+            body={"repository": "acme/shop"},
+            headers={"X-Rempart-Key": "fausse"},
+        ),
+        None,
+        store=store,
+        sa=fake_sa(),
+        settings=Settings(pipeline_key="vraie-cle"),
+    )
+    assert unconfigured["statusCode"] == wrong_key["statusCode"] == 403
+    assert body_of(unconfigured) == body_of(wrong_key)
+    assert "configur" not in body_of(unconfigured)["error"].lower()
+    # La cause réelle reste tracée pour l'exploitant, dans l'audit seulement.
+    assert "unconfigured" in [getattr(e, "object_id", "") for e in store.list_audit()]
 
 
 def test_audit_trail_is_written_on_creation():

@@ -21,6 +21,22 @@ from stacks.storage import StorageStack
 
 DEFAULT_ACCOUNT = "123456789012"
 DEFAULT_REGION = "eu-west-3"
+# Origine publique réelle du portail (déjà utilisée par scripts/deploy_portal.sh).
+DEFAULT_PORTAL_ORIGINS = ("https://d1o2xnfrq8xomh.cloudfront.net",)
+
+
+def portal_origins() -> list[str]:
+    """Origines autorisées pour CORS (portail CloudFront, surchargeable).
+
+    Mesure réelle du 12 nov. 2026 : l'API répondait
+    `Access-Control-Allow-Origin: *` sur toutes ses réponses. On restreint aux
+    origines réellement servies ; `REMPART_PORTAL_ORIGINS` (séparé par des
+    virgules) permet d'en ajouter sans toucher au code.
+    """
+    raw = os.environ.get("REMPART_PORTAL_ORIGINS")
+    if raw:
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return list(DEFAULT_PORTAL_ORIGINS)
 
 
 def target_environment() -> cdk.Environment:
@@ -43,6 +59,9 @@ def build_core_stacks(app: cdk.App, env: cdk.Environment) -> dict[str, Any]:
         user_pool_client=identity.user_pool_client,
         tables=storage.tables,
         table_prefix=storage.table_prefix,
+        reports_bucket=storage.reports_bucket,
+        portal_origins=portal_origins(),
+        pipeline_key_param=os.environ.get("REMPART_PIPELINE_KEY_SSM_PARAM") or None,
     )
     orchestrator = OrchestratorStack(
         app,
