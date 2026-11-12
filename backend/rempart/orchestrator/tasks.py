@@ -79,16 +79,40 @@ def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
+def _task_hours(deps: Deps, space_id: str, run_id: str) -> float:
+    """Heures-tâches RÉELLEMENT consommées, sommées sur les tâches du job.
+
+    INCIDENT RÉEL (12 nov. 2026) : on lisait ``taskHours`` sur la réponse de
+    ``BatchGetPentestJobs``. Le modèle officiel de l'API (service
+    ``securityagent`` 2025-09-06) ne déclare AUCUN ``taskHours`` sur
+    ``PentestJob`` — seulement ``maxTaskHours``, un plafond. Les heures vives
+    sont portées par ``TaskSummary.taskHours``, que rend
+    ``ListPentestJobTasks``. Conséquence mesurée sur le banc réel : heures
+    disponibles 0,005731 h côté service, ``run.task_hours = 0.0`` côté Rempart,
+    donc coût nul, budget jamais consommé, auto-stop R8 inopérant et prévision
+    EF-BUD-04 à zéro. Le double de test renvoyait ce champ inexistant : aucun
+    test ne pouvait le voir.
+    """
+    tasks = deps.sa.list_pentest_job_tasks(space_id, pentest_job_id=run_id)
+    total = 0.0
+    for task in tasks:
+        try:
+            total += float(task.get("taskHours") or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
 def _poll_job(deps: Deps, run: Run, space_id: str) -> tuple[str, float]:
     """Lit l'état du job côté Continuum et rend (statut, heures-tâches).
 
-    BatchGetPentestJobs exige ``agentSpaceId`` + ``pentestJobIds`` (tableau).
+    BatchGetPentestJobs exige ``agentSpaceId`` + ``pentestJobIds`` (tableau) et
+    ne donne que le statut ; les heures viennent de ``ListPentestJobTasks``.
     """
     jobs = deps.sa.batch_get_pentest_jobs(space_id, [run.run_id])
     job = jobs[0] if jobs else {}
     status = str(job.get("status", run.status)).lower()
-    task_hours = float(job.get("taskHours") or job.get("task_hours") or 0.0)
-    return status, task_hours
+    return status, _task_hours(deps, space_id, run.run_id)
 
 
 def _consume_budget(deps: Deps, run: Run, task_hours: float) -> BudgetVerdict:

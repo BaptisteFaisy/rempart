@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from rempart.common.api_enums import normalize_confidence, normalize_severity
 from rempart.common.fingerprint import fingerprint as make_fingerprint
 from rempart.common.models import Application, Finding
 from rempart.common.priority import compute_priority, due_date
@@ -21,8 +22,12 @@ from .task_types import Deps, app_of, exposed_critical, sensitive_data
 def _finding_from_sa(raw: dict[str, Any], app: Application, run_id: str) -> Finding:
     # FindingSummary documenté : name/riskLevel ; Rempart accepte aussi les
     # champs détaillés (title/severity) renvoyés par BatchGetFindings/fakes.
-    severity = str(raw.get("severity") or raw.get("riskLevel") or "Medium")
-    confidence = str(raw.get("confidence", "Medium"))
+    # La vraie API envoie `riskLevel`/`confidence` en MAJUSCULES (énumérations
+    # officielles) ; le modèle interne attend la casse de `models.SEVERITIES`.
+    # Sans cette normalisation, toute faille réelle tombait en P4 sans échéance
+    # et le garde-fou EF-TRI-05 ne se déclenchait jamais (voir api_enums).
+    severity = normalize_severity(raw.get("severity") or raw.get("riskLevel"))
+    confidence = normalize_confidence(raw.get("confidence"))
     risk_type = str(raw.get("riskType") or raw.get("risk_type") or "Unknown")
     entry_point = str(raw.get("entryPoint") or raw.get("entry_point") or "")
     parameter = raw.get("parameter")
@@ -50,7 +55,12 @@ def _finding_from_sa(raw: dict[str, Any], app: Application, run_id: str) -> Find
         due_at=iso(deadline) if deadline else None,
         ticket_url=None,
         remediation_pr_url=None,
-        evidence={"description": raw.get("description", "")},
+        evidence={
+            "description": raw.get("description", ""),
+            # Valeurs brutes de l'API : la normalisation ne doit rien faire perdre.
+            "api_risk_level": raw.get("riskLevel"),
+            "api_confidence": raw.get("confidence"),
+        },
         cvss=raw.get("cvss") or {},
         created_at=iso(created),
         updated_at=iso(created),
