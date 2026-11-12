@@ -23,16 +23,25 @@ def _headers_get(ctx: ApiContext, name: str) -> str | None:
             return v
     return None
 
+# Réponse unique et neutre : distinguer « clé absente » de « clé fausse »
+# renseigne un appelant non authentifié sur la configuration du serveur
+# (constat réel du 2026-11-12 sur l'API eu-north-1, où aucune clé n'était
+# posée et où le message le disait à tout venant). La cause exacte reste
+# tracée dans le journal d'audit, qui n'est lisible que par les rôles habilités.
+DENIED_RESPONSE = "Clé pipeline invalide ou absente"
+
+
 def _check_pipeline_key(ctx: ApiContext) -> tuple[int, dict[str, Any]] | None:
     """Return a 403 response when the pipeline shared key is missing or wrong."""
     expected = _expected_key(ctx)
     if not expected:
-        return error_response("Clé pipeline non configurée côté serveur", 403)
+        ctx.audit("deployment_event.rejected", "pipeline", "unconfigured", result="denied")
+        return error_response(DENIED_RESPONSE, 403)
 
     provided = _headers_get(ctx, "X-Rempart-Key")
     if not provided or provided != expected:
         ctx.audit("deployment_event.rejected", "pipeline", "unknown", result="denied")
-        return error_response("Clé pipeline invalide ou absente", 403)
+        return error_response(DENIED_RESPONSE, 403)
     return None
 
 def _match_application(ctx: ApiContext, repository: str) -> tuple[str | None, str | None]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import aws_cdk as cdk
 import aws_cdk.aws_dynamodb as ddb
+import aws_cdk.aws_s3 as s3
 from constructs import Construct
 
 from ._helpers import DEFAULT_TABLE_PREFIX, create_encrypted_table
@@ -34,6 +35,11 @@ TABLE_SPECS: list[tuple[str, str, str, list[tuple[str, str, str | None]]]] = [
 ]
 
 
+# ENF-DATA-01 : 13 mois de conservation, comme le TTL des tables DynamoDB
+# (`common/store.DEFAULT_RETENTION_MONTHS`) — 13 × 30,4375 ≈ 396 jours.
+REPORTS_RETENTION_DAYS = 396
+
+
 class StorageStack(cdk.Stack):
     """Provisions the 9 DynamoDB tables required by Rempart."""
 
@@ -52,6 +58,31 @@ class StorageStack(cdk.Stack):
         self.kms_key = None
         self.tables: dict[str, ddb.Table] = {}
         self._create_all_tables()
+        self.reports_bucket = self._create_reports_bucket()
+
+    def _create_reports_bucket(self) -> s3.Bucket:
+        """Bucket des rapports mensuels et dossiers de preuves (EF-RAP-04).
+
+        INCIDENT RÉEL (12 nov. 2026, compte 710332178565) : `POST
+        /v1/tenants/{id}/evidence` répondait 201 avec une clé S3 alors qu'aucun
+        bucket de rapports n'existait dans le compte — le dossier n'était jamais
+        conservé. Chiffrement AWS-managed et blocage public total : 0 €.
+        """
+        return s3.Bucket(
+            self,
+            "ReportsBucket",
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            enforce_ssl=True,
+            versioned=False,
+            removal_policy=cdk.RemovalPolicy.RETAIN,
+            lifecycle_rules=[
+                s3.LifecycleRule(
+                    id="ENF-DATA-01-retention",
+                    expiration=cdk.Duration.days(REPORTS_RETENTION_DAYS),
+                )
+            ],
+        )
 
     def _create_all_tables(self) -> None:
         for construct_id, name, pk_name, gsis in TABLE_SPECS:
