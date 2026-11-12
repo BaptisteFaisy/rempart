@@ -79,6 +79,14 @@ account, no cost) — regenerate them at any time with
 |---|---|
 | ![Finding detail](docs/img/05-finding.png) | ![Budget](docs/img/07-budget.png) |
 
+| Evidence dossier (scellé, empreinte recalculable) | Industrialization |
+|---|---|
+| ![Evidence dossier](docs/img/09-evidence.png) | ![Industrialization](docs/img/10-industrialization.png) |
+
+| Audit journal | Contract correction policy |
+|---|---|
+| ![Audit journal](docs/img/11-audit.png) | ![Policy](docs/img/12-policy.png) |
+
 <details>
 <summary>Every other screen (tenant, application, run, reports, login)</summary>
 
@@ -88,7 +96,7 @@ account, no cost) — regenerate them at any time with
 | Application | ![Application](docs/img/03-application.png) |
 | Run (pentest job) | ![Run](docs/img/04-run.png) |
 | Monthly reports | ![Reports](docs/img/08-reports.png) |
-| Login / demo mode | ![Login](docs/img/09-login.png) |
+| Login / demo mode | ![Login](docs/img/13-login.png) |
 
 </details>
 
@@ -191,10 +199,23 @@ cd portal && npm ci && npm run dev:local           # portal pointed at the local
 
 The local server serves the frozen dataset (`demo/seed/demo-dataset.json`:
 2 customers, 2 applications, 6 runs, 6 findings across the whole lifecycle,
-10 analyst decisions, budgets, 2 monthly reports) through the **real** API
-handlers and the **real** authorisation layer — so tenant isolation is
+10 analyst decisions, budgets, 2 monthly reports, **22 audit events, 2 sealed
+evidence dossiers (SHA-256 fingerprint a third party can recompute),
+industrialization metrics, a budget forecast and the correction policy**) through
+the **real** API handlers and the **real** authorisation layer — so tenant isolation is
 enforced for real: a `client_security` token from tenant A gets `403` on every
 tenant-B route. No AWS call is made, so nothing is billed.
+
+### Coût de la démo : 0 €
+
+Les deux options ci-dessous ne facturent **rien** : aucun compte AWS, aucun
+appel sortant, aucune donnée client sur une URL publique. Ce n'est pas une
+promesse mais un **test** : il coupe toute connexion réseau et vérifie que la
+démo répond quand même
+(`backend/tests/scripts/test_serve_local.py::test_la_demo_locale_ne_tente_aucun_appel_reseau`).
+
+Le déploiement AWS complet (Cognito, DynamoDB, Step Functions, Security Agent)
+est **optionnel** : il démontre le produit branché, pas la démo.
 
 ### Option B — public URL, live now
 
