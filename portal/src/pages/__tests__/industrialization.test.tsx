@@ -62,8 +62,9 @@ const NESTED: Industrialization = {
   }
 };
 
-/** Flat shape: every metric at the top level. */
-const FLAT: Industrialization = {
+/** Forme plate : chaque métrique au premier niveau. Le backend peut renvoyer
+ * cette forme ; le portail doit la tolérer sans casser. Hors type volontaire. */
+const FLAT = {
   tenant_id: 'demo-a',
   findings_total: 6,
   human_intervention_rate: 0.5,
@@ -74,7 +75,7 @@ const FLAT: Industrialization = {
   alert_reasons: ['queue too long'],
   coverage_ratio: 0.4,
   gaps: ['SSRF']
-};
+} as unknown as Industrialization;
 
 function renderPage() {
   return render(
