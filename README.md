@@ -183,7 +183,7 @@ aws cloudformation deploy \
 ### Option A — run it locally, no AWS account, zero cost (works today)
 
 ```bash
-git clone git@github.com:BaptisteFaisy/rempart.git && cd rempart
+git clone git@github.com:Tradoooo/rempart.git && cd rempart
 python3 -m venv .venv && .venv/bin/pip install -r backend/requirements-ci.txt
 .venv/bin/python scripts/serve_local.py            # API + frozen dataset on :8000
 cd portal && npm ci && npm run dev:local           # portal pointed at the local API
@@ -198,7 +198,7 @@ tenant-B route. No AWS call is made, so nothing is billed.
 
 ### Option B — public URL, live now
 
-**https://baptistefaisy.github.io/rempart/**
+**https://tradoooo.github.io/rempart/**
 
 Published on GitHub Pages from the `gh-pages` branch by
 `.github/workflows/deploy-pages.yml`. It runs in **offline demo mode**: the data
@@ -210,7 +210,7 @@ The full AWS-backed deployment (Cognito, DynamoDB, Step Functions, real
 Continuum calls) still needs credentials and a verified domain; tracked in
 [`docs/submission-checklist.md`](docs/submission-checklist.md).
 
-- **Portal URL**: `https://baptistefaisy.github.io/rempart/`
+- **Portal URL**: `https://tradoooo.github.io/rempart/`
 - **Judge credentials**: `JUDGE_USER` / `JUDGE_PASSWORD`, role `demo`
   (read-only, banner "Judge demo — read-only", one on-demand test per day on
   the minimal scope)

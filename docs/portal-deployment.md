@@ -34,7 +34,7 @@ Codes HTTP mesurés après redéploiement du 12/11 :
 | CloudFront `/` | **200** |
 | CloudFront `/assets/index-CNrqUXk2.js` (bundle courant) | **200** |
 | CloudFront `/fleet` (route profonde SPA) | **200** |
-| GitHub Pages (https://baptistefaisy.github.io/rempart/) | **200** (intact, branche `gh-pages` non touchée) |
+| GitHub Pages (https://tradoooo.github.io/rempart/) | **200** (intact, branche `gh-pages` non touchée) |
 
 Le bundle servi contient bien la configuration Cognito (domaine, client ID,
 URL d'API — vérifié par `grep` sur l'asset JS).

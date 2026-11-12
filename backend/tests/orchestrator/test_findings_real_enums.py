@@ -34,7 +34,7 @@ def critical_app() -> Application:
         environment="production",
         agent_space_id="space-live",
         domains=["d1o2xnfrq8xomh.cloudfront.net"],
-        repositories=["BaptisteFaisy/rempart"],
+        repositories=["Tradoooo/rempart"],
         team="rempart",
         ticket_channel="github",
         context={},

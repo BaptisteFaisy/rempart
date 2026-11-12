@@ -46,7 +46,7 @@ from proof_core import PROOFS, record, record_bool, request
 
 API = os.environ.get("REMPART_API", "https://qm6dmdkgdg.execute-api.eu-north-1.amazonaws.com")
 PORTAL = os.environ.get("REMPART_PORTAL", "https://d1o2xnfrq8xomh.cloudfront.net")
-PAGES = os.environ.get("REMPART_PAGES", "https://baptistefaisy.github.io/rempart")
+PAGES = os.environ.get("REMPART_PAGES", "https://tradoooo.github.io/rempart")
 REGION = os.environ.get("AWS_REGION", "eu-north-1")
 PREFIX = "rempart-"
 TOKEN = os.environ.get("REMPART_TOKEN", "")

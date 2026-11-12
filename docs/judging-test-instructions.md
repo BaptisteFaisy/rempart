@@ -12,7 +12,7 @@ At every release, Continuum tests the deployed change, Rempart triages the
 findings, opens a ticket with a contractual deadline, requests a remediation
 pull request, and closes the finding only when a retest proves it is gone.
 
-**Portal (live, public):** `https://baptistefaisy.github.io/rempart/`
+**Portal (live, public):** `https://tradoooo.github.io/rempart/`
 
 > Served by GitHub Pages in **offline demo mode**: the data comes from the
 > frozen dataset `demo/seed/demo-dataset.json`, the same one served by

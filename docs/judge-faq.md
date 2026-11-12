@@ -91,7 +91,7 @@ a real prompt-injection hole was found and fixed
 
 **Nothing is deployed on AWS to date** — no credentials were available during
 development. The public portal
-(https://baptistefaisy.github.io/rempart/) runs on a **frozen demo dataset**
+(https://tradoooo.github.io/rempart/) runs on a **frozen demo dataset**
 ([`demo/seed/demo-dataset.json`](../demo/seed/demo-dataset.json), 34 items);
 **no real pentest has been executed**, all code is validated against fakes
 ([`submission-checklist.md`](submission-checklist.md) items 3 and 5;

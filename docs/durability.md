@@ -64,8 +64,8 @@ jusque-là (cahier des charges, chapitre 1). La soumission est le **11 décembre
 
 | Élément | Où | Coût | Risque |
 |---|---|---|---|
-| Portail | https://baptistefaisy.github.io/rempart/ (branche `gh-pages`) | **0 €** | Faible : GitHub Pages, aucune dépendance runtime |
-| Code et docs | `github.com/BaptisteFaisy/rempart` | **0 €** | Faible, mais le dépôt est **public** alors que le cahier des charges demandait privé — décision à prendre |
+| Portail | https://tradoooo.github.io/rempart/ (branche `gh-pages`) | **0 €** | Faible : GitHub Pages, aucune dépendance runtime |
+| Code et docs | `github.com/Tradoooo/rempart` | **0 €** | Faible, mais le dépôt est **public** alors que le cahier des charges demandait privé — décision à prendre |
 | Vidéo | YouTube, publique | **0 €** | Moyen : une vidéo supprimée ou passée en privée disqualifie |
 | Plan de contrôle AWS | **non déployé** | < 1 $/mois si déployé (serverless) | Élevé tant que non déployé : rien à montrer en réel |
 | Premier test Continuum | **non exécuté** | 0 € si essai gratuit actif | **Élevé** : l'essai ne démarre qu'au premier test, et il dure 2 mois |
@@ -112,9 +112,9 @@ garde-fou `REMPART_FREE_TIER_ONLY=1` bloque tout test tant que
 ### Vérification hebdomadaire recommandée (10 minutes)
 
 ```bash
-curl -sS -o /dev/null -w "portail: %{http_code}\n" https://baptistefaisy.github.io/rempart/
-gh run list --repo BaptisteFaisy/rempart --limit 5   # CI verte ?
-gh api repos/BaptisteFaisy/rempart/pages --jq '.status, .html_url'
+curl -sS -o /dev/null -w "portail: %{http_code}\n" https://tradoooo.github.io/rempart/
+gh run list --repo Tradoooo/rempart --limit 5   # CI verte ?
+gh api repos/Tradoooo/rempart/pages --jq '.status, .html_url'
 # si déployé sur AWS : heures-tâches consommées ce mois-ci
 ```
 

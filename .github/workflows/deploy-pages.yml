@@ -1,6 +1,6 @@
 name: deploy-pages (portail public)
 
-# Publie le portail sur GitHub Pages : https://baptistefaisy.github.io/rempart/
+# Publie le portail sur GitHub Pages : https://tradoooo.github.io/rempart/
 #
 # Le site est servi en MODE DÉMO HORS LIGNE (VITE_USE_MOCKS=1) : les données
 # viennent du jeu figé `demo/seed/demo-dataset.json`, le même que celui servi
