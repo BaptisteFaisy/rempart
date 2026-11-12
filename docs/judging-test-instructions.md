@@ -19,6 +19,15 @@ pull request, and closes the finding only when a retest proves it is gone.
 > `scripts/serve_local.py`. No backend, no AWS account, no cost, and no real
 > customer data on a public URL. The portal displays an "OFFLINE DEMO MODE"
 > banner so nobody mistakes it for live data.
+>
+> **This demo costs 0 $.** It is not a promise but a test: the local demo server
+> is exercised with every network connection blocked, and it still answers
+> (`backend/tests/scripts/test_serve_local.py::test_la_demo_locale_ne_tente_aucun_appel_reseau`).
+> The frozen dataset is computed by the production code itself
+> (`rempart.reports.*`), so the figures shown — 22 audit events, sealed evidence
+> dossiers with a recomputable SHA-256 fingerprint, industrialization metrics,
+> the budget forecast and the correction policy — are the ones the deployed
+> stack would produce on the same data.
 
 ## Demo credentials
 

@@ -5,6 +5,7 @@ requête HTTP -> événement API Gateway v2, le mapping des en-têtes de démo e
 claims Cognito, le preflight CORS, la route inconnue (404) et le mode --check.
 """
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -179,3 +180,51 @@ def test_committed_dataset_is_used_verbatim(tmp_path):
     """Le serveur sert le JSON versionné, pas une copie divergente."""
     dataset = serve_local.load_dataset()
     assert dataset == json.loads(serve_local.DEFAULT_DATASET.read_text(encoding="utf-8"))
+
+
+def test_la_demo_locale_ne_tente_aucun_appel_reseau(monkeypatch, env):
+    """PREUVE « 0 € » : la démo ne dépend d'aucun service distant.
+
+    Toute connexion réseau est coupée pendant l'appel : si la démo répond
+    encore, c'est qu'elle ne parle à aucun AWS — donc qu'elle ne facture rien.
+    Le serveur de démo n'utilise qu'un `FakeStore` et un
+    `FakeSecurityAgentClient`, tous deux en mémoire.
+    """
+    import socket
+
+    def _blocked(*args, **kwargs):
+        raise AssertionError("la démo a tenté une connexion réseau")
+
+    monkeypatch.setattr(socket.socket, "connect", _blocked)
+    monkeypatch.setattr(socket, "create_connection", _blocked)
+
+    store, sa, settings = env
+    paths = (
+        "/v1/tenants",
+        "/v1/tenants/demo-a/evidence",
+        "/v1/tenants/demo-a/industrialization",
+        "/v1/tenants/demo-a/forecast",
+        "/v1/tenants/demo-a/policy",
+        "/v1/audit",
+    )
+    for path in paths:
+        response = serve_local.dispatch(
+            store, sa, settings, method="GET", raw_path=path,
+            headers={"X-Demo-Role": "platform_admin"},
+        )
+        assert response["statusCode"] == 200, (path, response["statusCode"])
+
+
+def test_le_dossier_de_preuves_de_la_demo_est_scelle_et_verifiable(env):
+    """La démo locale montre la même preuve que la production : une empreinte."""
+    store, sa, settings = env
+    response = serve_local.dispatch(
+        store, sa, settings, method="GET", raw_path="/v1/tenants/demo-a/evidence",
+        headers={"X-Demo-Role": "platform_admin"},
+    )
+    pack = _body(response)
+    digest = pack["integrity"]["digest"]
+    assert len(digest) == 64
+    payload = {k: v for k, v in pack.items() if k not in ("integrity", "s3_key")}
+    canonical = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, default=str)
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == digest

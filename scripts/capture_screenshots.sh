@@ -96,7 +96,13 @@ shoot_all() {
   shoot "06-triage" "/triage"
   shoot "07-budget" "/budget"
   shoot "08-reports" "/reports"
-  shoot "09-login" "/login"
+  # Les 4 pages de gouvernance : elles affichent désormais de vraies données
+  # (journal d'audit, dossier de preuves scellé, industrialisation, politique).
+  shoot "09-evidence" "/evidence"
+  shoot "10-industrialization" "/industrialization"
+  shoot "11-audit" "/audit"
+  shoot "12-policy" "/policy"
+  shoot "13-login" "/login"
 }
 
 main() {
