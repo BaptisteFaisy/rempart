@@ -49,6 +49,7 @@ from rempart.api.app import get_router, lambda_handler
 from rempart.common.config import Settings
 from rempart.common.models import (
     Application,
+    AuditEvent,
     BudgetState,
     Decision,
     Finding,
@@ -97,6 +98,8 @@ _SAVERS: dict[str, tuple[Any, str]] = {
     "decisions": (Decision.from_item, "save_decision"),
     "budget": (BudgetState.from_item, "save_budget"),
     "reports": (Report.from_item, "save_report"),
+    # L'audit fait partie des collections versionnées depuis le 12/11/2026.
+    "audit": (AuditEvent.from_item, "save_audit"),
 }
 
 
@@ -112,6 +115,10 @@ def store_from_dataset(dataset: dict[str, list[dict[str, Any]]]) -> FakeStore:
     """Charge le jeu dans un `FakeStore` en mémoire (aucune écriture AWS)."""
     store = FakeStore()
     for collection, items in dataset.items():
+        if collection not in _SAVERS:
+            # Collections dérivées (governance) : servies par les routes, qui
+            # les recalculent depuis les entités chargées ci-dessous.
+            continue
         from_item, method = _SAVERS[collection]
         for item in items:
             getattr(store, method)(from_item(item))

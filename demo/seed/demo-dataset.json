@@ -575,5 +575,1682 @@
       },
       "created_at": "2026-11-03T06:00:00Z"
     }
+  ],
+  "audit": [
+    {
+      "audit_id": "audit-demo-report-rep-demo-a-2026-10",
+      "actor": "analyst@msp.example",
+      "action": "report.create",
+      "object_type": "report",
+      "object_id": "rep-demo-a-2026-10",
+      "result": "ok",
+      "created_at": "2026-11-03T06:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-report-rep-demo-b-2026-10",
+      "actor": "analyst@msp.example",
+      "action": "report.create",
+      "object_type": "report",
+      "object_id": "rep-demo-b-2026-10",
+      "result": "ok",
+      "created_at": "2026-11-03T06:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-run-run-app-shop-3",
+      "actor": "orchestrator",
+      "action": "run.start",
+      "object_type": "run",
+      "object_id": "run-app-shop-3",
+      "result": "ok",
+      "created_at": "2026-10-20T09:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-run-run-app-book-3",
+      "actor": "orchestrator",
+      "action": "run.start",
+      "object_type": "run",
+      "object_id": "run-app-book-3",
+      "result": "ok",
+      "created_at": "2026-10-20T09:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-run-run-app-shop-2",
+      "actor": "orchestrator",
+      "action": "run.start",
+      "object_type": "run",
+      "object_id": "run-app-shop-2",
+      "result": "ok",
+      "created_at": "2026-10-12T06:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-run-run-app-book-2",
+      "actor": "orchestrator",
+      "action": "run.start",
+      "object_type": "run",
+      "object_id": "run-app-book-2",
+      "result": "ok",
+      "created_at": "2026-10-12T06:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-f-app-book-4",
+      "actor": "triage-agent",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-book-4",
+      "result": "confirmed",
+      "created_at": "2026-10-10T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-h-f-app-book-4",
+      "actor": "analyst@msp.example",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-book-4",
+      "result": "pending_validation",
+      "created_at": "2026-10-10T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-f-app-book-3",
+      "actor": "triage-agent",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-book-3",
+      "result": "confirmed",
+      "created_at": "2026-10-09T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-h-f-app-book-3",
+      "actor": "analyst@msp.example",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-book-3",
+      "result": "in_remediation",
+      "created_at": "2026-10-09T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-f-app-shop-2",
+      "actor": "triage-agent",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-shop-2",
+      "result": "confirmed",
+      "created_at": "2026-10-08T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-h-f-app-shop-2",
+      "actor": "analyst@msp.example",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-shop-2",
+      "result": "closed",
+      "created_at": "2026-10-08T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-f-app-shop-1",
+      "actor": "triage-agent",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-shop-1",
+      "result": "confirmed",
+      "created_at": "2026-10-07T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-h-f-app-shop-1",
+      "actor": "analyst@msp.example",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-shop-1",
+      "result": "confirmed",
+      "created_at": "2026-10-07T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-f-app-shop-0",
+      "actor": "triage-agent",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-shop-0",
+      "result": "confirmed",
+      "created_at": "2026-10-06T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-decision-dec-h-f-app-shop-0",
+      "actor": "analyst@msp.example",
+      "action": "finding.decision",
+      "object_type": "finding",
+      "object_id": "f-app-shop-0",
+      "result": "closed",
+      "created_at": "2026-10-06T10:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-run-run-app-shop-1",
+      "actor": "orchestrator",
+      "action": "run.start",
+      "object_type": "run",
+      "object_id": "run-app-shop-1",
+      "result": "ok",
+      "created_at": "2026-10-06T09:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-run-run-app-book-1",
+      "actor": "orchestrator",
+      "action": "run.start",
+      "object_type": "run",
+      "object_id": "run-app-book-1",
+      "result": "ok",
+      "created_at": "2026-10-06T09:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-tenant-demo-a",
+      "actor": "platform_admin@msp.example",
+      "action": "tenant.create",
+      "object_type": "tenant",
+      "object_id": "demo-a",
+      "result": "ok",
+      "created_at": "2026-10-05T08:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-tenant-demo-b",
+      "actor": "platform_admin@msp.example",
+      "action": "tenant.create",
+      "object_type": "tenant",
+      "object_id": "demo-b",
+      "result": "ok",
+      "created_at": "2026-10-05T08:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-app-app-shop",
+      "actor": "platform_admin@msp.example",
+      "action": "application.create",
+      "object_type": "application",
+      "object_id": "app-shop",
+      "result": "ok",
+      "created_at": "2026-10-05T08:00:00Z"
+    },
+    {
+      "audit_id": "audit-demo-app-app-book",
+      "actor": "platform_admin@msp.example",
+      "action": "application.create",
+      "object_type": "application",
+      "object_id": "app-book",
+      "result": "ok",
+      "created_at": "2026-10-05T08:00:00Z"
+    }
+  ],
+  "evidence": [
+    {
+      "tenant_id": "demo-a",
+      "period": "2026-10",
+      "pack": {
+        "identity": {
+          "product": "Rempart",
+          "evidence_version": "1.0",
+          "tenant_id": "demo-a",
+          "tenant_name": "Northwind Retail",
+          "period": "2026-10",
+          "generated_at": "2026-11-03T06:00:00Z",
+          "mandate_status": "valid",
+          "plan": "continu"
+        },
+        "scope": [
+          {
+            "app_id": "app-shop",
+            "name": "ShopLite",
+            "environment": "staging",
+            "criticality": "high",
+            "internet_exposed": true,
+            "data_types": [
+              "payment",
+              "personal"
+            ],
+            "domains": [
+              "app-shop.demo.example"
+            ],
+            "repositories": [
+              "demo/shoplite"
+            ],
+            "agent_space_id": "space-app-shop"
+          }
+        ],
+        "mandate_and_controls": {
+          "mandate_status": "unknown",
+          "applications_detail": [
+            {
+              "app_id": "app-shop",
+              "name": "ShopLite",
+              "criticality": "high",
+              "environment": "staging",
+              "open_by_priority": {
+                "P1": 1,
+                "P2": 0,
+                "P3": 0,
+                "P4": 0
+              },
+              "tests": 3,
+              "last_test_at": "2026-10-20T09:00:00Z"
+            }
+          ],
+          "budget_detail": {
+            "task_hours_used": 5.4,
+            "cost_usd": 270.0,
+            "monthly_budget_hours": 40.0,
+            "remaining_task_hours": 34.6,
+            "budget_used_pct": 13.5
+          }
+        },
+        "tests": [
+          {
+            "run_id": "run-app-shop-1",
+            "tenant_id": "demo-a",
+            "app_id": "app-shop",
+            "trigger": "cicd",
+            "status": "blocked",
+            "commit_from": "aaa111",
+            "commit_to": "bbb222",
+            "scope_decision": "deployed_range",
+            "started_at": "2026-10-06T09:00:00Z",
+            "ended_at": "2026-10-06T10:12:00Z",
+            "duration_s": 4320.0,
+            "task_hours": 1.4,
+            "cost_usd": 70.0
+          },
+          {
+            "run_id": "run-app-shop-2",
+            "tenant_id": "demo-a",
+            "app_id": "app-shop",
+            "trigger": "schedule",
+            "status": "completed",
+            "commit_from": "",
+            "commit_to": "",
+            "scope_decision": "full",
+            "started_at": "2026-10-12T06:00:00Z",
+            "ended_at": "2026-10-12T09:05:00Z",
+            "duration_s": 11100.0,
+            "task_hours": 3.1,
+            "cost_usd": 155.0
+          },
+          {
+            "run_id": "run-app-shop-3",
+            "tenant_id": "demo-a",
+            "app_id": "app-shop",
+            "trigger": "retest",
+            "status": "completed",
+            "commit_from": "ccc333",
+            "commit_to": "ddd444",
+            "scope_decision": "deployed_range",
+            "started_at": "2026-10-20T09:00:00Z",
+            "ended_at": "2026-10-20T09:48:00Z",
+            "duration_s": 2880.0,
+            "task_hours": 0.9,
+            "cost_usd": 45.0
+          }
+        ],
+        "tests_summary": {
+          "tests_total": 3,
+          "tests_blocked": 1,
+          "tests_by_type": {
+            "cicd": 1,
+            "schedule": 1,
+            "retest": 1
+          }
+        },
+        "closed_findings": [
+          {
+            "finding_id": "f-app-shop-0",
+            "title": "IDOR on order details",
+            "priority": "P1",
+            "application": "ShopLite",
+            "closed_at": "2026-10-20T09:48:00Z",
+            "proof": "https://github.com/demo/app-shop/pull/20"
+          },
+          {
+            "finding_id": "f-app-shop-2",
+            "title": "Verbose stack trace in error page",
+            "priority": "P3",
+            "application": "ShopLite",
+            "closed_at": "2026-10-20T09:48:00Z",
+            "proof": "https://github.com/demo/app-shop/pull/22"
+          }
+        ],
+        "closure_proofs": [
+          {
+            "finding_id": "f-app-shop-0",
+            "title": "IDOR on order details",
+            "priority": "P1",
+            "closed_at": "2026-10-20T09:48:00Z",
+            "proven_by_run_id": "run-app-shop-3"
+          },
+          {
+            "finding_id": "f-app-shop-2",
+            "title": "Verbose stack trace in error page",
+            "priority": "P3",
+            "closed_at": "2026-10-20T09:48:00Z",
+            "proven_by_run_id": "run-app-shop-3"
+          }
+        ],
+        "decision_chains": [
+          {
+            "finding": {
+              "finding_id": "f-app-shop-0",
+              "app_id": "app-shop",
+              "tenant_id": "demo-a",
+              "run_id": "run-app-shop-1",
+              "fingerprint": "fp-app-shop-idor",
+              "title": "IDOR on order details",
+              "risk_type": "IDOR",
+              "severity": "Critical",
+              "confidence": "High",
+              "priority": "P1",
+              "status": "closed",
+              "due_at": "2026-10-13T10:00:00Z",
+              "ticket_url": "https://github.com/demo/app-shop/issues/10",
+              "remediation_pr_url": "https://github.com/demo/app-shop/pull/20",
+              "cvss": {
+                "score": 8.1
+              },
+              "created_at": "2026-10-06T10:00:00Z",
+              "updated_at": "2026-10-06T10:00:00Z",
+              "closed_at": "2026-10-20T09:48:00Z",
+              "closed_by_run_id": "run-app-shop-3",
+              "risk_review_at": null,
+              "risk_review_by": null
+            },
+            "decisions": [
+              {
+                "decision_id": "dec-f-app-shop-0",
+                "author_type": "agent",
+                "author": "triage-agent",
+                "action": "CONFIRMED",
+                "justification": "Matrice déterministe : sévérité et confiance élevées.",
+                "created_at": "2026-10-06T10:00:00Z"
+              },
+              {
+                "decision_id": "dec-h-f-app-shop-0",
+                "author_type": "human",
+                "author": "analyst@msp.example",
+                "action": "closed",
+                "justification": "Validé en file de tri.",
+                "created_at": "2026-10-06T10:00:00Z"
+              }
+            ]
+          },
+          {
+            "finding": {
+              "finding_id": "f-app-shop-1",
+              "app_id": "app-shop",
+              "tenant_id": "demo-a",
+              "run_id": "run-app-shop-1",
+              "fingerprint": "fp-app-shop-bruteforce",
+              "title": "Missing rate limit on login",
+              "risk_type": "BruteForce",
+              "severity": "Medium",
+              "confidence": "High",
+              "priority": "P1",
+              "status": "confirmed",
+              "due_at": "2026-10-14T10:00:00Z",
+              "ticket_url": "https://github.com/demo/app-shop/issues/11",
+              "remediation_pr_url": null,
+              "cvss": {
+                "score": 5.4
+              },
+              "created_at": "2026-10-07T10:00:00Z",
+              "updated_at": "2026-10-07T10:00:00Z",
+              "closed_at": null,
+              "closed_by_run_id": null,
+              "risk_review_at": null,
+              "risk_review_by": null
+            },
+            "decisions": [
+              {
+                "decision_id": "dec-f-app-shop-1",
+                "author_type": "agent",
+                "author": "triage-agent",
+                "action": "CONFIRMED",
+                "justification": "Matrice déterministe : sévérité et confiance élevées.",
+                "created_at": "2026-10-07T10:00:00Z"
+              },
+              {
+                "decision_id": "dec-h-f-app-shop-1",
+                "author_type": "human",
+                "author": "analyst@msp.example",
+                "action": "confirmed",
+                "justification": "Validé en file de tri.",
+                "created_at": "2026-10-07T10:00:00Z"
+              }
+            ]
+          },
+          {
+            "finding": {
+              "finding_id": "f-app-shop-2",
+              "app_id": "app-shop",
+              "tenant_id": "demo-a",
+              "run_id": "run-app-shop-1",
+              "fingerprint": "fp-app-shop-infoleak",
+              "title": "Verbose stack trace in error page",
+              "risk_type": "InfoLeak",
+              "severity": "Low",
+              "confidence": "High",
+              "priority": "P3",
+              "status": "closed",
+              "due_at": "2027-01-06T10:00:00Z",
+              "ticket_url": "https://github.com/demo/app-shop/issues/12",
+              "remediation_pr_url": "https://github.com/demo/app-shop/pull/22",
+              "cvss": {
+                "score": 5.4
+              },
+              "created_at": "2026-10-08T10:00:00Z",
+              "updated_at": "2026-10-08T10:00:00Z",
+              "closed_at": "2026-10-20T09:48:00Z",
+              "closed_by_run_id": "run-app-shop-3",
+              "risk_review_at": null,
+              "risk_review_by": null
+            },
+            "decisions": [
+              {
+                "decision_id": "dec-f-app-shop-2",
+                "author_type": "agent",
+                "author": "triage-agent",
+                "action": "CONFIRMED",
+                "justification": "Matrice déterministe : sévérité et confiance élevées.",
+                "created_at": "2026-10-08T10:00:00Z"
+              },
+              {
+                "decision_id": "dec-h-f-app-shop-2",
+                "author_type": "human",
+                "author": "analyst@msp.example",
+                "action": "closed",
+                "justification": "Validé en file de tri.",
+                "created_at": "2026-10-08T10:00:00Z"
+              }
+            ]
+          }
+        ],
+        "exceptions": {
+          "false_positives": [],
+          "risk_accepted": []
+        },
+        "ai_guardrails": {
+          "priority_source": "deterministic matrix, recomputed by code after the model",
+          "model_can_dismiss_critical": false,
+          "critical_dismissed_without_human": []
+        },
+        "audit_events": [
+          {
+            "audit_id": "audit-demo-tenant-demo-a",
+            "actor": "platform_admin@msp.example",
+            "action": "tenant.create",
+            "object_type": "tenant",
+            "object_id": "demo-a",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-tenant-demo-b",
+            "actor": "platform_admin@msp.example",
+            "action": "tenant.create",
+            "object_type": "tenant",
+            "object_id": "demo-b",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-app-app-shop",
+            "actor": "platform_admin@msp.example",
+            "action": "application.create",
+            "object_type": "application",
+            "object_id": "app-shop",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-app-app-book",
+            "actor": "platform_admin@msp.example",
+            "action": "application.create",
+            "object_type": "application",
+            "object_id": "app-book",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-shop-1",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-shop-1",
+            "result": "ok",
+            "created_at": "2026-10-06T09:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-book-1",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-book-1",
+            "result": "ok",
+            "created_at": "2026-10-06T09:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-shop-0",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-0",
+            "result": "confirmed",
+            "created_at": "2026-10-06T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-shop-0",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-0",
+            "result": "closed",
+            "created_at": "2026-10-06T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-shop-1",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-1",
+            "result": "confirmed",
+            "created_at": "2026-10-07T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-shop-1",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-1",
+            "result": "confirmed",
+            "created_at": "2026-10-07T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-shop-2",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-2",
+            "result": "confirmed",
+            "created_at": "2026-10-08T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-shop-2",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-2",
+            "result": "closed",
+            "created_at": "2026-10-08T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-book-3",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-3",
+            "result": "confirmed",
+            "created_at": "2026-10-09T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-book-3",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-3",
+            "result": "in_remediation",
+            "created_at": "2026-10-09T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-book-4",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-4",
+            "result": "confirmed",
+            "created_at": "2026-10-10T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-book-4",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-4",
+            "result": "pending_validation",
+            "created_at": "2026-10-10T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-shop-2",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-shop-2",
+            "result": "ok",
+            "created_at": "2026-10-12T06:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-book-2",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-book-2",
+            "result": "ok",
+            "created_at": "2026-10-12T06:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-shop-3",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-shop-3",
+            "result": "ok",
+            "created_at": "2026-10-20T09:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-book-3",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-book-3",
+            "result": "ok",
+            "created_at": "2026-10-20T09:00:00Z"
+          }
+        ],
+        "kpis": {
+          "period": "2026-10",
+          "tenant_id": "demo-a",
+          "delivery_to_result_hours": 1.2,
+          "critical_blocked_before_prod": 1.0,
+          "mean_time_to_fix_days_by_priority": {
+            "P1": 13.99,
+            "P2": 0.0,
+            "P3": 11.99,
+            "P4": 0.0
+          },
+          "sla_compliance": 0.5,
+          "coverage": 1.0,
+          "reopen_rate": 0.0,
+          "findings_open_by_priority": {
+            "P1": 1,
+            "P2": 0,
+            "P3": 0,
+            "P4": 0
+          },
+          "findings_closed": 2,
+          "tests_total": 3,
+          "tests_blocked": 1,
+          "task_hours_used": 5.4,
+          "cost_usd": 270.0,
+          "findings_open_total": 1,
+          "findings_new_by_priority": {
+            "P1": 2,
+            "P2": 0,
+            "P3": 1,
+            "P4": 0
+          },
+          "risk_level": "critical",
+          "frozen": true,
+          "frozen_at": "2026-11-02T00:00:00Z",
+          "period_start": "2026-10-01T00:00:00Z",
+          "period_end": "2026-11-01T00:00:00Z",
+          "closed_findings": [
+            {
+              "finding_id": "f-app-shop-0",
+              "title": "IDOR on order details",
+              "priority": "P1",
+              "application": "ShopLite",
+              "closed_at": "2026-10-20T09:48:00Z",
+              "proof": "https://github.com/demo/app-shop/pull/20"
+            },
+            {
+              "finding_id": "f-app-shop-2",
+              "title": "Verbose stack trace in error page",
+              "priority": "P3",
+              "application": "ShopLite",
+              "closed_at": "2026-10-20T09:48:00Z",
+              "proof": "https://github.com/demo/app-shop/pull/22"
+            }
+          ],
+          "overdue_findings": [
+            {
+              "finding_id": "f-app-shop-1",
+              "title": "Missing rate limit on login",
+              "priority": "P1",
+              "application": "ShopLite",
+              "owner": "Core",
+              "due_at": "2026-10-14T10:00:00Z",
+              "new_target_date": "2026-10-14T10:00:00Z"
+            }
+          ],
+          "tests_detail": {
+            "tests_total": 3,
+            "tests_blocked": 1,
+            "tests_by_type": {
+              "cicd": 1,
+              "schedule": 1,
+              "retest": 1
+            }
+          },
+          "budget_detail": {
+            "task_hours_used": 5.4,
+            "cost_usd": 270.0,
+            "monthly_budget_hours": 40.0,
+            "remaining_task_hours": 34.6,
+            "budget_used_pct": 13.5
+          },
+          "applications_detail": [
+            {
+              "app_id": "app-shop",
+              "name": "ShopLite",
+              "criticality": "high",
+              "environment": "staging",
+              "open_by_priority": {
+                "P1": 1,
+                "P2": 0,
+                "P3": 0,
+                "P4": 0
+              },
+              "tests": 3,
+              "last_test_at": "2026-10-20T09:00:00Z"
+            }
+          ],
+          "recommendations": [
+            "Traiter en priorité les 1 faille(s) P1 encore ouverte(s) et leurs échéances contractuelles de 7 jours.",
+            "Réduire les dépassements d'échéance : le respect des SLA est inférieur à 90 %."
+          ]
+        },
+        "integrity": {
+          "algorithm": "sha256",
+          "digest": "9e413de29969f9f245c91cd96672aeca9344a590cf05707115f1d91b5b415317",
+          "canonical_form": "JSON, sort_keys=True, indent=2, ensure_ascii=False",
+          "recompute": "sha256(render_evidence_pack_json(pack_without_integrity))"
+        }
+      }
+    },
+    {
+      "tenant_id": "demo-b",
+      "period": "2026-10",
+      "pack": {
+        "identity": {
+          "product": "Rempart",
+          "evidence_version": "1.0",
+          "tenant_id": "demo-b",
+          "tenant_name": "Contoso Books",
+          "period": "2026-10",
+          "generated_at": "2026-11-03T06:00:00Z",
+          "mandate_status": "valid",
+          "plan": "essentiel"
+        },
+        "scope": [
+          {
+            "app_id": "app-book",
+            "name": "BookWorm",
+            "environment": "staging",
+            "criticality": "medium",
+            "internet_exposed": true,
+            "data_types": [
+              "personal"
+            ],
+            "domains": [
+              "app-book.demo.example"
+            ],
+            "repositories": [
+              "demo/bookworm"
+            ],
+            "agent_space_id": "space-app-book"
+          }
+        ],
+        "mandate_and_controls": {
+          "mandate_status": "unknown",
+          "applications_detail": [
+            {
+              "app_id": "app-book",
+              "name": "BookWorm",
+              "criticality": "medium",
+              "environment": "staging",
+              "open_by_priority": {
+                "P1": 1,
+                "P2": 1,
+                "P3": 1,
+                "P4": 0
+              },
+              "tests": 3,
+              "last_test_at": "2026-10-20T09:00:00Z"
+            }
+          ],
+          "budget_detail": {
+            "task_hours_used": 5.4,
+            "cost_usd": 270.0,
+            "monthly_budget_hours": 20.0,
+            "remaining_task_hours": 14.6,
+            "budget_used_pct": 27.0
+          }
+        },
+        "tests": [
+          {
+            "run_id": "run-app-book-1",
+            "tenant_id": "demo-b",
+            "app_id": "app-book",
+            "trigger": "cicd",
+            "status": "blocked",
+            "commit_from": "aaa111",
+            "commit_to": "bbb222",
+            "scope_decision": "deployed_range",
+            "started_at": "2026-10-06T09:00:00Z",
+            "ended_at": "2026-10-06T10:12:00Z",
+            "duration_s": 4320.0,
+            "task_hours": 1.4,
+            "cost_usd": 70.0
+          },
+          {
+            "run_id": "run-app-book-2",
+            "tenant_id": "demo-b",
+            "app_id": "app-book",
+            "trigger": "schedule",
+            "status": "completed",
+            "commit_from": "",
+            "commit_to": "",
+            "scope_decision": "full",
+            "started_at": "2026-10-12T06:00:00Z",
+            "ended_at": "2026-10-12T09:05:00Z",
+            "duration_s": 11100.0,
+            "task_hours": 3.1,
+            "cost_usd": 155.0
+          },
+          {
+            "run_id": "run-app-book-3",
+            "tenant_id": "demo-b",
+            "app_id": "app-book",
+            "trigger": "retest",
+            "status": "completed",
+            "commit_from": "ccc333",
+            "commit_to": "ddd444",
+            "scope_decision": "deployed_range",
+            "started_at": "2026-10-20T09:00:00Z",
+            "ended_at": "2026-10-20T09:48:00Z",
+            "duration_s": 2880.0,
+            "task_hours": 0.9,
+            "cost_usd": 45.0
+          }
+        ],
+        "tests_summary": {
+          "tests_total": 3,
+          "tests_blocked": 1,
+          "tests_by_type": {
+            "cicd": 1,
+            "schedule": 1,
+            "retest": 1
+          }
+        },
+        "closed_findings": [],
+        "closure_proofs": [],
+        "decision_chains": [
+          {
+            "finding": {
+              "finding_id": "f-app-book-3",
+              "app_id": "app-book",
+              "tenant_id": "demo-b",
+              "run_id": "run-app-book-1",
+              "fingerprint": "fp-app-book-sqli",
+              "title": "SQL injection in search",
+              "risk_type": "SQLI",
+              "severity": "Critical",
+              "confidence": "High",
+              "priority": "P1",
+              "status": "in_remediation",
+              "due_at": "2026-10-16T10:00:00Z",
+              "ticket_url": "https://github.com/demo/app-book/issues/13",
+              "remediation_pr_url": "https://github.com/demo/app-book/pull/23",
+              "cvss": {
+                "score": 8.1
+              },
+              "created_at": "2026-10-09T10:00:00Z",
+              "updated_at": "2026-10-09T10:00:00Z",
+              "closed_at": null,
+              "closed_by_run_id": null,
+              "risk_review_at": null,
+              "risk_review_by": null
+            },
+            "decisions": [
+              {
+                "decision_id": "dec-f-app-book-3",
+                "author_type": "agent",
+                "author": "triage-agent",
+                "action": "CONFIRMED",
+                "justification": "Matrice déterministe : sévérité et confiance élevées.",
+                "created_at": "2026-10-09T10:00:00Z"
+              },
+              {
+                "decision_id": "dec-h-f-app-book-3",
+                "author_type": "human",
+                "author": "analyst@msp.example",
+                "action": "in_remediation",
+                "justification": "Validé en file de tri.",
+                "created_at": "2026-10-09T10:00:00Z"
+              }
+            ]
+          },
+          {
+            "finding": {
+              "finding_id": "f-app-book-4",
+              "app_id": "app-book",
+              "tenant_id": "demo-b",
+              "run_id": "run-app-book-1",
+              "fingerprint": "fp-app-book-brokenauth",
+              "title": "Admin route without access control",
+              "risk_type": "BrokenAuth",
+              "severity": "High",
+              "confidence": "Medium",
+              "priority": "P2",
+              "status": "pending_validation",
+              "due_at": "2026-11-09T10:00:00Z",
+              "ticket_url": "https://github.com/demo/app-book/issues/14",
+              "remediation_pr_url": null,
+              "cvss": {
+                "score": 5.4
+              },
+              "created_at": "2026-10-10T10:00:00Z",
+              "updated_at": "2026-10-10T10:00:00Z",
+              "closed_at": null,
+              "closed_by_run_id": null,
+              "risk_review_at": null,
+              "risk_review_by": null
+            },
+            "decisions": [
+              {
+                "decision_id": "dec-f-app-book-4",
+                "author_type": "agent",
+                "author": "triage-agent",
+                "action": "CONFIRMED",
+                "justification": "Matrice déterministe : sévérité et confiance élevées.",
+                "created_at": "2026-10-10T10:00:00Z"
+              },
+              {
+                "decision_id": "dec-h-f-app-book-4",
+                "author_type": "human",
+                "author": "analyst@msp.example",
+                "action": "pending_validation",
+                "justification": "Validé en file de tri.",
+                "created_at": "2026-10-10T10:00:00Z"
+              }
+            ]
+          },
+          {
+            "finding": {
+              "finding_id": "f-app-book-5",
+              "app_id": "app-book",
+              "tenant_id": "demo-b",
+              "run_id": "run-app-book-1",
+              "fingerprint": "fp-app-book-misconfig",
+              "title": "Session cookie without Secure flag",
+              "risk_type": "Misconfig",
+              "severity": "Medium",
+              "confidence": "Low",
+              "priority": "P3",
+              "status": "new",
+              "due_at": "2027-01-09T10:00:00Z",
+              "ticket_url": null,
+              "remediation_pr_url": null,
+              "cvss": {
+                "score": 5.4
+              },
+              "created_at": "2026-10-11T10:00:00Z",
+              "updated_at": "2026-10-11T10:00:00Z",
+              "closed_at": null,
+              "closed_by_run_id": null,
+              "risk_review_at": null,
+              "risk_review_by": null
+            },
+            "decisions": []
+          }
+        ],
+        "exceptions": {
+          "false_positives": [],
+          "risk_accepted": []
+        },
+        "ai_guardrails": {
+          "priority_source": "deterministic matrix, recomputed by code after the model",
+          "model_can_dismiss_critical": false,
+          "critical_dismissed_without_human": []
+        },
+        "audit_events": [
+          {
+            "audit_id": "audit-demo-tenant-demo-a",
+            "actor": "platform_admin@msp.example",
+            "action": "tenant.create",
+            "object_type": "tenant",
+            "object_id": "demo-a",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-tenant-demo-b",
+            "actor": "platform_admin@msp.example",
+            "action": "tenant.create",
+            "object_type": "tenant",
+            "object_id": "demo-b",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-app-app-shop",
+            "actor": "platform_admin@msp.example",
+            "action": "application.create",
+            "object_type": "application",
+            "object_id": "app-shop",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-app-app-book",
+            "actor": "platform_admin@msp.example",
+            "action": "application.create",
+            "object_type": "application",
+            "object_id": "app-book",
+            "result": "ok",
+            "created_at": "2026-10-05T08:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-shop-1",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-shop-1",
+            "result": "ok",
+            "created_at": "2026-10-06T09:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-book-1",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-book-1",
+            "result": "ok",
+            "created_at": "2026-10-06T09:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-shop-0",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-0",
+            "result": "confirmed",
+            "created_at": "2026-10-06T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-shop-0",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-0",
+            "result": "closed",
+            "created_at": "2026-10-06T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-shop-1",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-1",
+            "result": "confirmed",
+            "created_at": "2026-10-07T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-shop-1",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-1",
+            "result": "confirmed",
+            "created_at": "2026-10-07T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-shop-2",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-2",
+            "result": "confirmed",
+            "created_at": "2026-10-08T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-shop-2",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-shop-2",
+            "result": "closed",
+            "created_at": "2026-10-08T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-book-3",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-3",
+            "result": "confirmed",
+            "created_at": "2026-10-09T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-book-3",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-3",
+            "result": "in_remediation",
+            "created_at": "2026-10-09T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-f-app-book-4",
+            "actor": "triage-agent",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-4",
+            "result": "confirmed",
+            "created_at": "2026-10-10T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-decision-dec-h-f-app-book-4",
+            "actor": "analyst@msp.example",
+            "action": "finding.decision",
+            "object_type": "finding",
+            "object_id": "f-app-book-4",
+            "result": "pending_validation",
+            "created_at": "2026-10-10T10:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-shop-2",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-shop-2",
+            "result": "ok",
+            "created_at": "2026-10-12T06:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-book-2",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-book-2",
+            "result": "ok",
+            "created_at": "2026-10-12T06:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-shop-3",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-shop-3",
+            "result": "ok",
+            "created_at": "2026-10-20T09:00:00Z"
+          },
+          {
+            "audit_id": "audit-demo-run-run-app-book-3",
+            "actor": "orchestrator",
+            "action": "run.start",
+            "object_type": "run",
+            "object_id": "run-app-book-3",
+            "result": "ok",
+            "created_at": "2026-10-20T09:00:00Z"
+          }
+        ],
+        "kpis": {
+          "period": "2026-10",
+          "tenant_id": "demo-b",
+          "delivery_to_result_hours": 1.2,
+          "critical_blocked_before_prod": 1.0,
+          "mean_time_to_fix_days_by_priority": {
+            "P1": 0.0,
+            "P2": 0.0,
+            "P3": 0.0,
+            "P4": 0.0
+          },
+          "sla_compliance": 1.0,
+          "coverage": 1.0,
+          "reopen_rate": 0.0,
+          "findings_open_by_priority": {
+            "P1": 1,
+            "P2": 1,
+            "P3": 1,
+            "P4": 0
+          },
+          "findings_closed": 0,
+          "tests_total": 3,
+          "tests_blocked": 1,
+          "task_hours_used": 5.4,
+          "cost_usd": 270.0,
+          "findings_open_total": 3,
+          "findings_new_by_priority": {
+            "P1": 1,
+            "P2": 1,
+            "P3": 1,
+            "P4": 0
+          },
+          "risk_level": "critical",
+          "frozen": true,
+          "frozen_at": "2026-11-02T00:00:00Z",
+          "period_start": "2026-10-01T00:00:00Z",
+          "period_end": "2026-11-01T00:00:00Z",
+          "closed_findings": [],
+          "overdue_findings": [
+            {
+              "finding_id": "f-app-book-3",
+              "title": "SQL injection in search",
+              "priority": "P1",
+              "application": "BookWorm",
+              "owner": "Core",
+              "due_at": "2026-10-16T10:00:00Z",
+              "new_target_date": "2026-10-16T10:00:00Z"
+            }
+          ],
+          "tests_detail": {
+            "tests_total": 3,
+            "tests_blocked": 1,
+            "tests_by_type": {
+              "cicd": 1,
+              "schedule": 1,
+              "retest": 1
+            }
+          },
+          "budget_detail": {
+            "task_hours_used": 5.4,
+            "cost_usd": 270.0,
+            "monthly_budget_hours": 20.0,
+            "remaining_task_hours": 14.6,
+            "budget_used_pct": 27.0
+          },
+          "applications_detail": [
+            {
+              "app_id": "app-book",
+              "name": "BookWorm",
+              "criticality": "medium",
+              "environment": "staging",
+              "open_by_priority": {
+                "P1": 1,
+                "P2": 1,
+                "P3": 1,
+                "P4": 0
+              },
+              "tests": 3,
+              "last_test_at": "2026-10-20T09:00:00Z"
+            }
+          ],
+          "recommendations": [
+            "Traiter en priorité les 1 faille(s) P1 encore ouverte(s) et leurs échéances contractuelles de 7 jours.",
+            "Planifier la remédiation des 1 faille(s) P2 sous 30 jours."
+          ]
+        },
+        "integrity": {
+          "algorithm": "sha256",
+          "digest": "374a37d3bd2a18fdf01423c56bd6a8575c2c3bfeb77deeba2c747b2e9a8a0340",
+          "canonical_form": "JSON, sort_keys=True, indent=2, ensure_ascii=False",
+          "recompute": "sha256(render_evidence_pack_json(pack_without_integrity))"
+        }
+      }
+    }
+  ],
+  "industrialization": [
+    {
+      "tenant_id": "demo-a",
+      "metrics": {
+        "tenant_id": "demo-a",
+        "period": "2026-10",
+        "intervention": {
+          "period": "2026-10",
+          "tenant_id": "demo-a",
+          "findings_total": 3,
+          "findings_with_human_decision": 3,
+          "human_intervention_rate": 1.0,
+          "findings_with_agent_proposal": 3,
+          "findings_reviewed_by_human": 1,
+          "findings_diverged": 0,
+          "agent_human_divergence_rate": 0.0,
+          "divergence_rate_among_reviewed": 0.0,
+          "agent_agreement_rate_on_reviewed": 1.0,
+          "human_decisions": 3,
+          "human_decisions_not_comparable": 2,
+          "agent_decisions": 3,
+          "monthly_volume": {
+            "2026-10": {
+              "findings": 3,
+              "human_intervened": 3,
+              "diverged": 0
+            }
+          },
+          "monthly_human_decisions": {
+            "2026-10": 3
+          },
+          "formulas": {
+            "human_intervention_rate": "findings_with_human_decision / findings_total",
+            "agent_human_divergence_rate": "findings_diverged / findings_total",
+            "divergence_rate_among_reviewed": "findings_diverged / findings_reviewed_by_human",
+            "agent_agreement_rate_on_reviewed": "1 - divergence_rate_among_reviewed"
+          }
+        },
+        "alert_fatigue": {
+          "period": "2026-10",
+          "tenant_id": "demo-a",
+          "window_start": "2026-10-01T00:00:00Z",
+          "window_end": "2026-11-01T00:00:00Z",
+          "window_days": 31,
+          "human_validations": 3,
+          "active_days": 3,
+          "validations_per_active_day": 1.0,
+          "validations_per_calendar_day": 0.097,
+          "comparable_validations": 1,
+          "unchanged_validations": 1,
+          "diverged_validations": 0,
+          "no_change_validation_ratio": 1.0,
+          "fatigue_score": 0.025,
+          "alert_reasons": [
+            "100% des validations n'ont rien changé à la proposition de l'agent (seuil 50%) : l'analyste valide en série."
+          ],
+          "alert_triggered": true,
+          "thresholds": {
+            "no_change_validation_ratio": 0.5,
+            "validations_per_active_day": 40,
+            "fatigue_score": 0.5
+          }
+        },
+        "minutes_saved": {
+          "period": "2026-10",
+          "tenant_id": "demo-a",
+          "findings_total": 3,
+          "findings_triaged": 3,
+          "findings_not_triaged": 0,
+          "findings_automatically_triaged": 0,
+          "findings_reviewed_by_human": 3,
+          "manual_minutes_if_all_human": 36.0,
+          "estimated_minutes_spent": 36.0,
+          "minutes_saved": 0.0,
+          "hours_saved": 0.0,
+          "assumptions": {
+            "minutes_per_finding_manual": 12.0,
+            "minutes_per_finding_automatic": 1.0,
+            "measured": false,
+            "is_estimate": true,
+            "basis": "hypothèse documentée, pas une mesure : le produit ne relève pas le temps analyste ; seul le temps des failles triées sans intervention humaine est crédité"
+          }
+        },
+        "corpus": {
+          "tenant_id": "demo-a",
+          "since": null,
+          "size": 3,
+          "by_status": {
+            "closed": 2,
+            "confirmed": 1
+          },
+          "by_final_verdict": {
+            "CONFIRMED": 1
+          },
+          "by_risk_type": {
+            "BruteForce": 1,
+            "IDOR": 1,
+            "InfoLeak": 1
+          },
+          "by_severity": {
+            "Critical": 1,
+            "Low": 1,
+            "Medium": 1
+          },
+          "by_agent_human_relation": {
+            "not_comparable": 2,
+            "unchanged": 1
+          },
+          "observed_risk_types": [
+            "BruteForce",
+            "IDOR",
+            "InfoLeak"
+          ],
+          "configured_risk_types": [
+            "BrokenAuth",
+            "IDOR",
+            "SQLI"
+          ],
+          "covered_risk_types": [
+            "BruteForce",
+            "IDOR",
+            "InfoLeak"
+          ],
+          "gaps": [
+            "BrokenAuth",
+            "SQLI"
+          ],
+          "coverage_ratio": 0.6
+        }
+      }
+    },
+    {
+      "tenant_id": "demo-b",
+      "metrics": {
+        "tenant_id": "demo-b",
+        "period": "2026-10",
+        "intervention": {
+          "period": "2026-10",
+          "tenant_id": "demo-b",
+          "findings_total": 3,
+          "findings_with_human_decision": 2,
+          "human_intervention_rate": 0.6667,
+          "findings_with_agent_proposal": 2,
+          "findings_reviewed_by_human": 1,
+          "findings_diverged": 1,
+          "agent_human_divergence_rate": 0.3333,
+          "divergence_rate_among_reviewed": 1.0,
+          "agent_agreement_rate_on_reviewed": 0.0,
+          "human_decisions": 2,
+          "human_decisions_not_comparable": 1,
+          "agent_decisions": 2,
+          "monthly_volume": {
+            "2026-10": {
+              "findings": 3,
+              "human_intervened": 2,
+              "diverged": 1
+            }
+          },
+          "monthly_human_decisions": {
+            "2026-10": 2
+          },
+          "formulas": {
+            "human_intervention_rate": "findings_with_human_decision / findings_total",
+            "agent_human_divergence_rate": "findings_diverged / findings_total",
+            "divergence_rate_among_reviewed": "findings_diverged / findings_reviewed_by_human",
+            "agent_agreement_rate_on_reviewed": "1 - divergence_rate_among_reviewed"
+          }
+        },
+        "alert_fatigue": {
+          "period": "2026-10",
+          "tenant_id": "demo-b",
+          "window_start": "2026-10-01T00:00:00Z",
+          "window_end": "2026-11-01T00:00:00Z",
+          "window_days": 31,
+          "human_validations": 2,
+          "active_days": 2,
+          "validations_per_active_day": 1.0,
+          "validations_per_calendar_day": 0.065,
+          "comparable_validations": 1,
+          "unchanged_validations": 0,
+          "diverged_validations": 1,
+          "no_change_validation_ratio": 0.0,
+          "fatigue_score": 0.0,
+          "alert_reasons": [],
+          "alert_triggered": false,
+          "thresholds": {
+            "no_change_validation_ratio": 0.5,
+            "validations_per_active_day": 40,
+            "fatigue_score": 0.5
+          }
+        },
+        "minutes_saved": {
+          "period": "2026-10",
+          "tenant_id": "demo-b",
+          "findings_total": 3,
+          "findings_triaged": 2,
+          "findings_not_triaged": 1,
+          "findings_automatically_triaged": 0,
+          "findings_reviewed_by_human": 2,
+          "manual_minutes_if_all_human": 24.0,
+          "estimated_minutes_spent": 24.0,
+          "minutes_saved": 0.0,
+          "hours_saved": 0.0,
+          "assumptions": {
+            "minutes_per_finding_manual": 12.0,
+            "minutes_per_finding_automatic": 1.0,
+            "measured": false,
+            "is_estimate": true,
+            "basis": "hypothèse documentée, pas une mesure : le produit ne relève pas le temps analyste ; seul le temps des failles triées sans intervention humaine est crédité"
+          }
+        },
+        "corpus": {
+          "tenant_id": "demo-b",
+          "since": null,
+          "size": 2,
+          "by_status": {
+            "in_remediation": 1,
+            "pending_validation": 1
+          },
+          "by_final_verdict": {
+            "TO_VERIFY": 1
+          },
+          "by_risk_type": {
+            "BrokenAuth": 1,
+            "SQLI": 1
+          },
+          "by_severity": {
+            "Critical": 1,
+            "High": 1
+          },
+          "by_agent_human_relation": {
+            "diverged": 1,
+            "not_comparable": 1
+          },
+          "observed_risk_types": [
+            "BrokenAuth",
+            "Misconfig",
+            "SQLI"
+          ],
+          "configured_risk_types": [
+            "BrokenAuth",
+            "IDOR",
+            "SQLI"
+          ],
+          "covered_risk_types": [
+            "BrokenAuth",
+            "SQLI"
+          ],
+          "gaps": [
+            "IDOR",
+            "Misconfig"
+          ],
+          "coverage_ratio": 0.5
+        }
+      }
+    }
+  ],
+  "forecast": [
+    {
+      "tenant_id": "demo-a",
+      "forecast": {
+        "period": "2026-10",
+        "days_in_month": 31,
+        "days_elapsed": 31,
+        "hours_used": 5.4,
+        "hours_per_day": 0.174194,
+        "projected_hours": 5.4,
+        "projected_cost_usd": 270.0,
+        "monthly_budget_hours": 40.0,
+        "projected_pct": 13.5,
+        "exceeds_budget": false,
+        "exhaustion_date": null,
+        "reference_cost_per_config": {
+          "cfg-app-shop-delivery": {
+            "samples": 1,
+            "avg_task_hours": 0.9,
+            "avg_cost_usd": 45.0,
+            "low_confidence": true
+          },
+          "cfg-app-shop-full": {
+            "samples": 1,
+            "avg_task_hours": 3.1,
+            "avg_cost_usd": 155.0,
+            "low_confidence": true
+          }
+        }
+      }
+    },
+    {
+      "tenant_id": "demo-b",
+      "forecast": {
+        "period": "2026-10",
+        "days_in_month": 31,
+        "days_elapsed": 31,
+        "hours_used": 5.4,
+        "hours_per_day": 0.174194,
+        "projected_hours": 5.4,
+        "projected_cost_usd": 270.0,
+        "monthly_budget_hours": 20.0,
+        "projected_pct": 27.0,
+        "exceeds_budget": false,
+        "exhaustion_date": null,
+        "reference_cost_per_config": {
+          "cfg-app-book-delivery": {
+            "samples": 1,
+            "avg_task_hours": 0.9,
+            "avg_cost_usd": 45.0,
+            "low_confidence": true
+          },
+          "cfg-app-book-full": {
+            "samples": 1,
+            "avg_task_hours": 3.1,
+            "avg_cost_usd": 155.0,
+            "low_confidence": true
+          }
+        }
+      }
+    }
+  ],
+  "policy": [
+    {
+      "tenant_id": "demo-a",
+      "policy": {},
+      "effective": {
+        "due_days": {
+          "P1": 7,
+          "P2": 30,
+          "P3": 90,
+          "P4": null
+        },
+        "matrix_overrides": {},
+        "blocking_threshold": "High",
+        "hourly_rate": 50.0
+      }
+    },
+    {
+      "tenant_id": "demo-b",
+      "policy": {},
+      "effective": {
+        "due_days": {
+          "P1": 7,
+          "P2": 30,
+          "P3": 90,
+          "P4": null
+        },
+        "matrix_overrides": {},
+        "blocking_threshold": "High",
+        "hourly_rate": 50.0
+      }
+    }
+  ],
+  "policy_defaults": [
+    {
+      "due_days": {
+        "P1": 7,
+        "P2": 30,
+        "P3": 90,
+        "P4": null
+      },
+      "matrix_overrides": {},
+      "blocking_threshold": "High",
+      "hourly_rate": 50.0
+    }
   ]
 }

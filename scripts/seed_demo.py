@@ -25,6 +25,10 @@ from pathlib import Path
 from typing import Any
 
 BACKEND = Path(__file__).resolve().parents[1] / "backend"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from demo_governance import governance_collections
+
 sys.path.insert(0, str(BACKEND))
 
 from rempart.common.models import (
@@ -209,6 +213,24 @@ def _finding(index: int, tenant_id: str, app: Application, row: tuple) -> Findin
     )
 
 
+def _reports() -> list[dict[str, Any]]:
+    """Rapports mensuels figés : mêmes KPI que le rapport réel de la période."""
+    return [
+        Report(
+            report_id=f"rep-{spec['tenant_id']}-2026-10",
+            tenant_id=spec["tenant_id"], period="2026-10",
+            s3_key=f"reports/{spec['tenant_id']}/2026-10/demo.pdf",
+            kpis={"delivery_to_result_hours": 1.2,
+                  "critical_blocked_before_prod": 1.0,
+                  "mean_time_to_fix_days_by_priority": {"P1": 3.0},
+                  "sla_compliance": 1.0, "coverage": 1.0, "reopen_rate": 0.0,
+                  "task_hours_used": 5.4, "cost_usd": 270.0},
+            created_at="2026-11-03T06:00:00Z"
+        ).to_item()
+        for spec in DEMO_TENANTS
+    ]
+
+
 def build_dataset() -> dict[str, list[dict[str, Any]]]:
     """Construit le jeu de données figé, sérialisable en JSON."""
     tenants, apps, configs, runs, findings, decisions, budgets, reports = (
@@ -242,29 +264,29 @@ def build_dataset() -> dict[str, list[dict[str, Any]]]:
                 author="analyst@msp.example", action=finding.status,
                 justification="Validé en file de tri.",
                 created_at=finding.created_at).to_item())
-    for spec in DEMO_TENANTS:
-        reports.append(Report(
-            report_id=f"rep-{spec['tenant_id']}-2026-10",
-            tenant_id=spec["tenant_id"], period="2026-10",
-            s3_key=f"reports/{spec['tenant_id']}/2026-10/demo.pdf",
-            kpis={"delivery_to_result_hours": 1.2,
-                  "critical_blocked_before_prod": 1.0,
-                  "mean_time_to_fix_days_by_priority": {"P1": 3.0},
-                  "sla_compliance": 1.0, "coverage": 1.0, "reopen_rate": 0.0,
-                  "task_hours_used": 5.4, "cost_usd": 270.0},
-            created_at="2026-11-03T06:00:00Z").to_item())
-    return {
+    reports.extend(_reports())
+    dataset = {
         "tenants": tenants, "applications": apps, "test_configs": configs,
         "runs": runs, "findings": findings, "decisions": decisions,
         "budget": budgets, "reports": reports,
     }
+    dataset.update(governance_collections(dataset, load_into_store))
+    return dataset
 
 
-def load_into_store(dataset: dict[str, list[dict[str, Any]]]) -> int:
-    """Charge le jeu dans DynamoDB via le Store réel. Rend le nombre d'items."""
-    from rempart.common.store import Store
+def load_into_store(
+    dataset: dict[str, list[dict[str, Any]]], store: Any = None
+) -> int:
+    """Charge le jeu dans un magasin (Store réel par défaut, injectable).
 
-    store = Store()
+    ``store`` injectable sert au calcul des collections de gouvernance : on
+    charge le même jeu dans un magasin en mémoire (plus de DynamoDB à démarrer)
+    puis on appelle le code de production (`rempart.reports.*`).
+    """
+    if store is None:
+        from rempart.common.store import Store
+
+        store = Store()
     loaders = {
         "tenants": (Tenant.from_item, store.save_tenant),
         "applications": (Application.from_item, store.save_application),

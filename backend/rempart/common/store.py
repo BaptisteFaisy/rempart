@@ -334,7 +334,14 @@ class Store:
         object_type: str,
         object_id: str,
         result: str = "ok",
+        created_at: str | None = None,
     ) -> AuditEvent:
+        """Ajoute un événement d'audit immuable.
+
+        ``created_at`` est surchargeable : un jeu de démonstration ou un rejeu
+        horodate les événements à la date du scénario plutôt qu'à celle du
+        chargement (sinon un rapport d'octobre porterait la date du jour).
+        """
         evt = AuditEvent(
             audit_id=f"audit-{uuid.uuid4().hex[:12]}",
             actor=actor,
@@ -342,10 +349,20 @@ class Store:
             object_type=object_type,
             object_id=object_id,
             result=result,
-            created_at=iso(utcnow()),
+            created_at=created_at or iso(utcnow()),
         )
-        self._table("audit").put_item(Item=self._item(evt))
-        return evt
+        return self.save_audit(evt)
+
+    def save_audit(self, event: AuditEvent) -> AuditEvent:
+        """Conserve un événement d'audit tel quel (identifiant et horodatage fournis).
+
+        Utile aux rejeux de scénario : un jeu de démonstration reconstruit des
+        événements déterministes (identifiants stables) pour que le journal et
+        l'empreinte du dossier de preuves soient reproductibles d'une
+        régénération à l'autre.
+        """
+        self._table("audit").put_item(Item=self._item(event))
+        return event
 
     def list_audit(
         self,
