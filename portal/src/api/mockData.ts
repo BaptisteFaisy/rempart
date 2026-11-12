@@ -17,10 +17,12 @@ import {
   Decision,
   Finding,
   Kpis,
+  OnboardingStatus,
   Priority,
   Report,
   Run,
-  Tenant
+  Tenant,
+  TestConfig
 } from '../types';
 
 type SeedItems = Record<string, unknown>[];
@@ -31,23 +33,34 @@ function collection<T>(key: string): T[] {
   return (SEED[key] ?? []) as unknown as T[];
 }
 
+/** Read any collection of the frozen dataset (empty array when absent). */
+export function seedCollection<T>(key: string): T[] {
+  return collection<T>(key);
+}
+
+/** True when the frozen dataset carries this collection. */
+export function seedHas(key: string): boolean {
+  return Array.isArray(SEED[key]) && SEED[key].length > 0;
+}
+
 export const DEMO_COLLECTIONS: readonly string[] = Object.keys(SEED);
 
 export const DEMO_TENANTS: Tenant[] = collection<Tenant>('tenants');
 export const DEMO_APPLICATIONS: Application[] = collection<Application>('applications');
+export const DEMO_TEST_CONFIGS: TestConfig[] = collection<TestConfig>('test_configs');
 export const DEMO_RUNS: Run[] = collection<Run>('runs');
 export const DEMO_FINDINGS: Finding[] = collection<Finding>('findings');
 export const DEMO_DECISIONS: Decision[] = collection<Decision>('decisions');
 export const DEMO_REPORTS: Report[] = collection<Report>('reports');
 export const DEMO_BUDGETS: BudgetState[] = collection<BudgetState>('budget');
 
+export { PRIORITIES } from '../types/constants';
+
 /** Total number of items in the frozen dataset (used by the offline banner). */
 export const DEMO_ITEM_COUNT: number = DEMO_COLLECTIONS.reduce(
   (total, key) => total + (SEED[key] ?? []).length,
   0
 );
-
-export const PRIORITIES: Priority[] = ['P1', 'P2', 'P3', 'P4'];
 
 /** Statuses that keep a finding "open" (mirrors the backend lifecycle). */
 const OPEN_STATUSES = new Set([
@@ -192,6 +205,10 @@ export function demoReports(tenantId?: string): Report[] {
   return tenantId ? DEMO_REPORTS.filter((r) => r.tenant_id === tenantId) : DEMO_REPORTS;
 }
 
+export function demoReport(reportId: string): Report | null {
+  return DEMO_REPORTS.find((r) => r.report_id === reportId) ?? null;
+}
+
 export function demoDecisions(findingId?: string): Decision[] {
   return findingId
     ? DEMO_DECISIONS.filter((d) => d.finding_id === findingId)
@@ -206,5 +223,28 @@ export function demoBudget(tenantId: string): BudgetState {
     hours_used: 0,
     thresholds_hit: [],
     auto_stop: false
+  };
+}
+
+export function demoTestConfigs(appId?: string): TestConfig[] {
+  return appId ? DEMO_TEST_CONFIGS.filter((c) => c.app_id === appId) : DEMO_TEST_CONFIGS;
+}
+
+/**
+ * Onboarding state of the frozen dataset: an application is onboarded when it
+ * owns an agent space and at least one TestConfig. The AWS-side verification
+ * instructions only exist in the answer of `POST .../onboarding`, so offline
+ * they are absent unless the dataset carries them.
+ */
+export function demoOnboarding(appId: string): OnboardingStatus | null {
+  const app = demoApplication(appId);
+  if (!app) return null;
+  const configs = demoTestConfigs(appId);
+  return {
+    app_id: appId,
+    onboarded: Boolean(app.agent_space_id) && configs.length > 0,
+    agent_space_id: app.agent_space_id ?? null,
+    domains: app.domains,
+    configs
   };
 }

@@ -5,10 +5,18 @@ Découpé en trois modules pour rester sous la limite de 500 lignes par fichier 
 humaine, fatigue d'alerte, minutes économisées), ``corpus`` (export du corpus
 d'entraînement constitué par les décisions humaines).
 
-Tout est calculé par du code déterministe (ENF-IA-01) ; les hypothèses non
-mesurées sont explicitement marquées ``ASSUMED``.
+Tout est calculé par du code déterministe (ENF-IA-01) ; les conventions non
+mesurées (seuils de fatigue, minutes par faille) sont marquées comme telles.
 """
 
-from ._common import *  # noqa: F401,F403
-from .corpus import *  # noqa: F401,F403
-from .metrics import *  # noqa: F401,F403
+from .corpus import corpus_json, corpus_statistics, export_training_corpus
+from .metrics import alert_fatigue_indicators, analyst_minutes_saved, human_intervention_rate
+
+__all__ = [
+    "alert_fatigue_indicators",
+    "analyst_minutes_saved",
+    "corpus_json",
+    "corpus_statistics",
+    "export_training_corpus",
+    "human_intervention_rate",
+]

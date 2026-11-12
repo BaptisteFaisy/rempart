@@ -23,7 +23,11 @@ export function Navbar({ tenants = [] }: NavbarProps) {
     { to: '/fleet', label: 'Fleet' },
     { to: '/triage', label: 'Triage Queue' },
     { to: '/reports', label: 'Reports' },
-    { to: '/budget', label: 'Budget' }
+    { to: '/budget', label: 'Budget' },
+    { to: '/policy', label: 'Policy' },
+    { to: '/evidence', label: 'Evidence' },
+    { to: '/industrialization', label: 'Industrialization' },
+    { to: '/audit', label: 'Audit' }
   ];
 
   return (

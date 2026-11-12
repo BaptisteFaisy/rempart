@@ -1,25 +1,17 @@
-"""Industrialisation metrics for Rempart (pistes #34 and #68, ENF-IA-01).
+"""Corpus de décisions de tri (piste #34) : export anonymisé et statistiques.
 
-Two questions, answered with plain Python — no language model ever takes part
-in a number:
+Chaque correction d'analyste alimente un jeu de référence réutilisable par
+l'agent de tri, pour que l'actif s'apprécie avec l'usage. L'export ne contient
+aucun contenu brut de faille : seuls les champs nécessaires au tri et
+l'étiquette humaine sortent (schéma documenté sur :func:`export_training_corpus`).
 
-* **#68 — taux d'intervention humaine** : how many findings still need a
-  human? A finding nobody touched was triaged by the agent alone; a finding a
-  human decided on is an agency in disguise. The useful sub-metric is the
-  *divergence* : a human who confirms the agent without changing anything
-  pays the click for nothing (see :func:`alert_fatigue_indicators`).
-* **#34 — corpus de décisions** : every analyst correction must feed a
-  reusable reference set for the triage agent, otherwise the asset does not
-  appreciate with usage. The export is anonymised : no raw finding content
-  ever leaves the function (see :func:`export_training_corpus`).
-
-Determinism: same store + same parameters = same bytes. The only clock used
-is ``now``, and it is injectable wherever it defines a window.
-
-Découpé depuis ``industrialization.py`` (642 lignes > la limite de 500).
+L'export est stable et déterministe (clés et tri fixes, aucune valeur issue de
+l'horloge) : il est versionnable et diffable.
 """
 import hashlib
+import json
 from collections import Counter
+from datetime import datetime
 from typing import Any
 
 from rempart.common.models import Application, Decision, Finding
@@ -103,6 +95,25 @@ def _case(
     }
 
 
+def _collect_cases(
+    store: Store, tenant_id: str | None, since_at: datetime | None
+) -> list[dict[str, Any]]:
+    """Build one labelled case per finding judged by a human after ``since_at``."""
+    apps = {a.app_id: a for a in store.list_applications(tenant_id=tenant_id)}
+    cases: list[dict[str, Any]] = []
+    for finding in _scoped_findings(store, tenant_id, None):
+        decisions = _sorted_decisions(store, finding.finding_id)
+        humans = [d for d in decisions if d.author_type == "human"]
+        if not humans:
+            continue
+        final = humans[-1]
+        moment = _parse(final.created_at)
+        if since_at is not None and (moment is None or moment < since_at):
+            continue
+        cases.append(_case(finding, decisions, final, apps.get(finding.app_id)))
+    return cases
+
+
 def export_training_corpus(
     store: Store,
     *,
@@ -148,20 +159,7 @@ def export_training_corpus(
     sorted by ``(decided_at, case_id)`` and holds no clock-derived value :
     two successive exports are byte-for-byte identical.
     """
-    findings = _scoped_findings(store, tenant_id, None)
-    apps = {a.app_id: a for a in store.list_applications(tenant_id=tenant_id)}
-    since_at = _parse(since)
-    cases: list[dict[str, Any]] = []
-    for finding in findings:
-        decisions = _sorted_decisions(store, finding.finding_id)
-        humans = [d for d in decisions if d.author_type == "human"]
-        if not humans:
-            continue
-        final = humans[-1]
-        moment = _parse(final.created_at)
-        if since_at is not None and (moment is None or moment < since_at):
-            continue
-        cases.append(_case(finding, decisions, final, apps.get(finding.app_id)))
+    cases = _collect_cases(store, tenant_id, _parse(since))
     return sorted(cases, key=lambda c: (c["label"]["decided_at"], c["case_id"]))
 
 
@@ -182,6 +180,15 @@ def _configured_risk_types(store: Store, tenant_id: str | None) -> list[str]:
 def _sorted_counter(counter: Counter[str]) -> dict[str, int]:
     """Counter as a dict with sorted keys (stable, diffable output)."""
     return {key: counter[key] for key in sorted(counter)}
+
+
+def corpus_json(cases: list[dict[str, Any]]) -> str:
+    """Serialize a corpus export with sorted keys : stable, versionnable, diffable.
+
+    Two successive exports of the same store produce byte-for-byte identical
+    text, so a corpus can be committed and reviewed like any other artefact.
+    """
+    return json.dumps(cases, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
 
 
 def corpus_statistics(

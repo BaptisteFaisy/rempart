@@ -14,6 +14,10 @@ import { FindingPage } from './pages/Finding';
 import { TriageQueue } from './pages/TriageQueue';
 import { Reports } from './pages/Reports';
 import { Budget } from './pages/Budget';
+import { AuditPage } from './pages/Audit';
+import { PolicyPage } from './pages/Policy';
+import { EvidencePage } from './pages/Evidence';
+import { IndustrializationPage } from './pages/Industrialization';
 
 export function App() {
   const { session } = useSession();
@@ -40,6 +44,10 @@ export function App() {
           <Route path="/triage" element={<TriageQueue />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/budget" element={<Budget />} />
+          <Route path="/audit" element={<AuditPage />} />
+          <Route path="/policy" element={<PolicyPage />} />
+          <Route path="/evidence" element={<EvidencePage />} />
+          <Route path="/industrialization" element={<IndustrializationPage />} />
           <Route path="*" element={<Navigate to="/fleet" replace />} />
         </Routes>
       </main>

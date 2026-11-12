@@ -266,15 +266,21 @@ def render_evidence_pack_json(pack: dict[str, Any]) -> str:
     return json.dumps(pack, indent=2, sort_keys=True, ensure_ascii=False, default=str)
 
 
-def integrity_digest(pack: dict[str, Any]) -> str:
-    """SHA-256 du rendu déterministe.
+# Champs exclus du contenu haché : `integrity` (sinon le condensé dépendrait de
+# lui-même) et `s3_key`, qui est une métadonnée de transport ajoutée APRÈS le
+# scellement par `build_and_upload`. Sans cette exclusion, un auditeur qui
+# récupère le dossier stocké ne pourrait pas recalculer l'empreinte.
+NON_PROBATIVE_KEYS = ("integrity", "s3_key")
 
-    Recalculable par un auditeur : `sha256sum` du JSON, ou
-    `hashlib.sha256(render_evidence_pack_json(pack).encode()).hexdigest()`.
-    Le champ `integrity` n'est PAS inclus dans le contenu haché, sinon le
-    condensé dépendrait de lui-même.
+
+def integrity_digest(pack: dict[str, Any]) -> str:
+    """SHA-256 du rendu déterministe du contenu probant.
+
+    Recalculable par un auditeur : `sha256sum` du JSON rendu après retrait des
+    champs non probants, ou
+    `hashlib.sha256(render_evidence_pack_json(pack_sans_ces_champs).encode()).hexdigest()`.
     """
-    payload = {k: v for k, v in pack.items() if k != "integrity"}
+    payload = {k: v for k, v in pack.items() if k not in NON_PROBATIVE_KEYS}
     return hashlib.sha256(render_evidence_pack_json(payload).encode("utf-8")).hexdigest()
 
 

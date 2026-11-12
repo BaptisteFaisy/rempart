@@ -1,4 +1,4 @@
-"""Helpers et constantes partagés par les métriques d'industrialisation.
+"""Constantes et helpers partagés par les métriques d'industrialisation.
 
 Découpé depuis ``industrialization.py`` (642 lignes > la limite de 500).
 """
@@ -10,10 +10,6 @@ from rempart.common.models import Decision, Finding
 from rempart.common.store import Store
 from rempart.common.timeutil import parse_iso
 from rempart.reports.metrics import period_bounds, within_period
-
-# La définition des « données sensibles » est celle des garde-fous (chapitre 12) :
-# on la partage au lieu de la dupliquer.
-
 
 __all__ = [
     "AGENT_VERDICTS",
@@ -180,12 +176,6 @@ class _Review:
     not_comparable: int
 
     @property
-    def final_human(self) -> Decision | None:
-        """Last human decision (the one that carries the final label)."""
-        humans = [d for d in self.decisions if d.author_type == "human"]
-        return humans[-1] if humans else None
-
-    @property
     def reviewed(self) -> bool:
         """True when the agent proposed and a human judged the same finding."""
         return self.unchanged + self.diverged > 0
@@ -218,8 +208,3 @@ def _review_finding(finding: Finding, decisions: list[Decision]) -> _Review:
 def _reviews(store: Store, findings: list[Finding]) -> list[_Review]:
     """Review every finding of the scope."""
     return [_review_finding(f, _sorted_decisions(store, f.finding_id)) for f in findings]
-
-
-# --------------------------------------------------------------------------- #
-# #68 — taux d'intervention humaine
-# --------------------------------------------------------------------------- #

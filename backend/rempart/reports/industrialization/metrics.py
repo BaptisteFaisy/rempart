@@ -1,22 +1,12 @@
-"""Industrialisation metrics for Rempart (pistes #34 and #68, ENF-IA-01).
+"""Métriques d'industrialisation : #68 (taux d'intervention humaine), #26
+(fatigue d'alerte) et #47 (temps analyste économisé).
 
-Two questions, answered with plain Python — no language model ever takes part
-in a number:
+Tout est calculé par du code déterministe (ENF-IA-01) : aucun modèle ne
+participe à un chiffre. La seule horloge utilisée est ``now``, injectable
+partout où elle définit une fenêtre.
 
-* **#68 — taux d'intervention humaine** : how many findings still need a
-  human? A finding nobody touched was triaged by the agent alone; a finding a
-  human decided on is an agency in disguise. The useful sub-metric is the
-  *divergence* : a human who confirms the agent without changing anything
-  pays the click for nothing (see :func:`alert_fatigue_indicators`).
-* **#34 — corpus de décisions** : every analyst correction must feed a
-  reusable reference set for the triage agent, otherwise the asset does not
-  appreciate with usage. The export is anonymised : no raw finding content
-  ever leaves the function (see :func:`export_training_corpus`).
-
-Determinism: same store + same parameters = same bytes. The only clock used
-is ``now``, and it is injectable wherever it defines a window.
-
-Découpé depuis ``industrialization.py`` (642 lignes > la limite de 500).
+Les conventions non mesurées (seuils de fatigue, minutes par faille) sont
+marquées comme telles dans les constantes de ``_common`` et dans la sortie.
 """
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -27,8 +17,6 @@ from rempart.common.store import Store
 from rempart.common.timeutil import utcnow
 from rempart.reports.metrics import period_bounds
 
-# La définition des « données sensibles » est celle des garde-fous (chapitre 12) :
-# on la partage au lieu de la dupliquer.
 from ._common import (
     ALERT_FATIGUE_SCORE_THRESHOLD,
     ALERT_RATIO_THRESHOLD,
@@ -74,6 +62,14 @@ def _monthly_human_decisions(reviews: list[_Review]) -> dict[str, int]:
     return {month: counts[month] for month in sorted(counts)}
 
 
+INTERVENTION_FORMULAS = {
+    "human_intervention_rate": "findings_with_human_decision / findings_total",
+    "agent_human_divergence_rate": "findings_diverged / findings_total",
+    "divergence_rate_among_reviewed": "findings_diverged / findings_reviewed_by_human",
+    "agent_agreement_rate_on_reviewed": "1 - divergence_rate_among_reviewed",
+}
+
+
 def human_intervention_rate(
     store: Store,
     *,
@@ -82,19 +78,16 @@ def human_intervention_rate(
 ) -> dict[str, Any]:
     """Share of the findings that needed a human, and where the agent was corrected.
 
-    Scope: the findings of the tenant created during the period ('YYYY-MM');
-    with no period, every finding of the tenant.
+    Scope : the findings of the tenant created during the period ('YYYY-MM') ;
+    with no period, every finding of the tenant. Formulas (ENF-IA-01) are
+    returned verbatim under ``formulas`` so a third party can recompute them :
 
-    Formulas (deterministic, ENF-IA-01):
-
-    * ``human_intervention_rate``
-      = findings_with_human_decision / findings_total
-    * ``agent_human_divergence_rate`` = findings_diverged / findings_total
-      (a finding is *diverged* when a human verdict differs from the agent
-      proposal that preceded it: the analyst had to correct the agent)
-    * ``divergence_rate_among_reviewed``
-      = findings_diverged / findings_reviewed_by_human
-      (the agent's error rate on the findings a human actually looked at)
+    * ``human_intervention_rate`` = findings_with_human_decision / findings_total
+    * ``agent_human_divergence_rate`` = findings_diverged / findings_total — a
+      finding is *diverged* when a human verdict differs from the agent proposal
+      that preceded it (the analyst had to correct the agent)
+    * ``divergence_rate_among_reviewed`` = findings_diverged /
+      findings_reviewed_by_human (the agent's error rate where a human looked)
     """
     findings = _scoped_findings(store, tenant_id, period)
     reviews = _reviews(store, findings)
@@ -119,15 +112,11 @@ def human_intervention_rate(
             round(1.0 - divergence_rate, 4) if divergence_rate is not None else None
         ),
         "human_decisions": sum(r.human_decisions for r in reviews),
+        "human_decisions_not_comparable": sum(r.not_comparable for r in reviews),
         "agent_decisions": sum(r.agent_decisions for r in reviews),
         "monthly_volume": _monthly_volume(reviews),
         "monthly_human_decisions": _monthly_human_decisions(reviews),
-        "formulas": {
-            "human_intervention_rate": "findings_with_human_decision / findings_total",
-            "agent_human_divergence_rate": "findings_diverged / findings_total",
-            "divergence_rate_among_reviewed": "findings_diverged / findings_reviewed_by_human",
-            "agent_agreement_rate_on_reviewed": "1 - divergence_rate_among_reviewed",
-        },
+        "formulas": INTERVENTION_FORMULAS,
     }
 
 
@@ -175,36 +164,10 @@ def _alert_reasons(ratio: float | None, per_active_day: float, score: float) -> 
     return reasons
 
 
-def alert_fatigue_indicators(
-    store: Store,
-    *,
-    tenant_id: str | None = None,
-    period: str | None = None,
-    now: datetime | None = None,
+def _fatigue_counts(
+    reviews: list[_Review], start: datetime, end: datetime, days: int
 ) -> dict[str, Any]:
-    """Alert-fatigue indicators (piste #26) of the triage loop.
-
-    The analyst clicks "confirm" without reading when the queue is too long or
-    when the proposals are too easy to rubber-stamp. Both are measured here:
-
-    * ``validations_per_active_day`` : human validations per day that had at
-      least one validation (the queue seen by the analyst);
-    * ``no_change_validation_ratio`` : share of validations that changed
-      *nothing* compared to the agent proposal (rubber-stamp clicks), computed
-      on the comparable validations only — a decision whose action is not a
-      triage verdict is not comparable and is excluded;
-    * ``fatigue_score`` = ``no_change_validation_ratio`` x min(1,
-      ``validations_per_active_day`` / 40) — bounded to [0, 1].
-
-    The thresholds are the documented conventions explained in the module
-    constants; the alert is raised when one of them is exceeded (strictly).
-    ``now`` is injectable so the rolling window (30 days without a period) is
-    reproducible.
-    """
-    reference = (now or utcnow()).astimezone(timezone.utc)
-    start, end = _window(period, reference)
-    days = max(1, (end - start).days)
-    reviews = _reviews(store, _scoped_findings(store, tenant_id, None))
+    """Raw counts and derived ratios of the fatigue window."""
     validations = _validations_in_window(reviews, start, end)
     active_days = {(d.created_at or "")[:10] for d, _ in validations}
     comparable = [rel for _, rel in validations if rel != RELATION_NOT_COMPARABLE]
@@ -216,13 +179,7 @@ def alert_fatigue_indicators(
     score = round(
         (ratio or 0.0) * min(1.0, per_active_day / ALERT_VALIDATIONS_PER_DAY_THRESHOLD), 4
     )
-    reasons = _alert_reasons(ratio, per_active_day, score)
     return {
-        "period": period,
-        "tenant_id": tenant_id,
-        "window_start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "window_end": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "window_days": days,
         "human_validations": len(validations),
         "active_days": len(active_days),
         "validations_per_active_day": per_active_day,
@@ -232,8 +189,48 @@ def alert_fatigue_indicators(
         "diverged_validations": diverged,
         "no_change_validation_ratio": ratio,
         "fatigue_score": score,
-        "alert_triggered": bool(reasons),
-        "alert_reasons": reasons,
+        "alert_reasons": _alert_reasons(ratio, per_active_day, score),
+    }
+
+
+def alert_fatigue_indicators(
+    store: Store,
+    *,
+    tenant_id: str | None = None,
+    period: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Alert-fatigue indicators (piste #26) of the triage loop.
+
+    The analyst clicks "confirm" without reading when the queue is too long or
+    when the proposals are too easy to rubber-stamp:
+
+    * ``validations_per_active_day`` : human validations per day that had at
+      least one validation (the queue seen by the analyst) ;
+    * ``no_change_validation_ratio`` : share of validations that changed
+      *nothing* compared to the agent proposal (rubber-stamp clicks), computed
+      on the comparable validations only — a decision whose action is not a
+      triage verdict is not comparable and is excluded ;
+    * ``fatigue_score`` = ``no_change_validation_ratio`` x min(1,
+      ``validations_per_active_day`` / 40) — bounded to [0, 1].
+
+    The thresholds are the documented conventions of the module constants ; the
+    alert is raised when one of them is exceeded (strictly). ``now`` is
+    injectable so the rolling window (30 days without a period) is reproducible.
+    """
+    reference = (now or utcnow()).astimezone(timezone.utc)
+    start, end = _window(period, reference)
+    days = max(1, (end - start).days)
+    reviews = _reviews(store, _scoped_findings(store, tenant_id, None))
+    counts = _fatigue_counts(reviews, start, end, days)
+    return {
+        "period": period,
+        "tenant_id": tenant_id,
+        "window_start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "window_end": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "window_days": days,
+        **counts,
+        "alert_triggered": bool(counts["alert_reasons"]),
         "thresholds": {
             "no_change_validation_ratio": ALERT_RATIO_THRESHOLD,
             "validations_per_active_day": ALERT_VALIDATIONS_PER_DAY_THRESHOLD,

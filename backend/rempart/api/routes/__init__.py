@@ -8,6 +8,7 @@ from . import (
     budget,
     events,
     findings,
+    governance,
     kpis,
     onboarding,
     reports,
@@ -17,6 +18,7 @@ from . import (
 )
 
 _ROUTE_MODULES = (
+    governance,
     tenants,
     applications,
     onboarding,

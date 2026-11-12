@@ -1,28 +1,36 @@
-"""Échelle : isolation des KPI par client et coût réel des lectures.
+"""Échelle : isolation par client et coût réel des lectures (piste #41).
 
-Piste #41 (``docs/scaling-100-ideas.md``) : passer de 2 à 50 clients ne doit
-pas faire exploser le plan de contrôle. Ce test mesure deux choses :
-
-1. l'**exactitude** — les KPI d'un client ne doivent contenir aucune donnée
-   d'un autre client : on compare les KPI de la flotte à ceux d'un client seul
-   dans son propre magasin ;
-2. le **coût** — une lecture scopée client doit coûter un nombre d'éléments
-   proportionnel au client, pas à la flotte : un faux DynamoDB qui respecte
-   les conditions de clé compte les éléments réellement lus par ``scan`` et
-   par ``query``.
-
-Échelle du test : 50 clients × 20 applications × 500 failles par client, soit
-25 000 failles, 1 000 applications et 600 exécutions.
+50 clients × 20 applications × 500 failles : le test mesure l'**exactitude**
+(rien d'un autre client dans les KPI, listes et journal d'audit) et le **coût**
+(éléments parcourus proportionnels au client, comptés par un faux DynamoDB qui
+respecte les conditions de clé), puis la conformité des GSI déclarés/utilisés.
 """
 
+import ast
+import re
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from rempart.common.models import PRIORITIES, Application, Finding, Run, Tenant
+from rempart.api.routes.audit import belongs_to, tenant_object_ids
+from rempart.common.models import (
+    PRIORITIES,
+    Application,
+    Decision,
+    Finding,
+    Report,
+    Run,
+    Tenant,
+    TestConfig,
+)
 from rempart.common.store import Store
 from rempart.reports.metrics import compute_kpis
 from tests.fakes import FakeDdbResource, FakeDdbTable, FakeStore
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+STORE_PATH = REPO_ROOT / "backend" / "rempart" / "common" / "store.py"
+STORAGE_PATH = REPO_ROOT / "iac" / "control-plane" / "stacks" / "storage.py"
 
 N_TENANTS = 50
 APPS_PER_TENANT = 20
@@ -36,22 +44,13 @@ DUE_AT = "2026-11-25T10:00:00Z"
 STARTED_AT = "2026-11-03T08:00:00Z"
 
 
-# --------------------------------------------------------------------------- #
-# Generators: deterministic data, identical structure for every tenant.
-# --------------------------------------------------------------------------- #
+# --- Generators: deterministic data, identical structure for every tenant. ---
 def _tenant(tenant_id: str) -> Tenant:
     return Tenant(
-        tenant_id=tenant_id,
-        name=f"Client {tenant_id}",
-        aws_account_id="123456789012",
-        region="eu-west-3",
-        role_arn="arn:aws:iam::123456789012:role/rempart",
-        external_id="ext-1",
-        plan="continu",
-        contacts=[{"email": f"ops@{tenant_id}.example"}],
-        monthly_budget_hours=30.0,
-        mandate_status="valid",
-        created_at="2026-01-01T00:00:00Z",
+        tenant_id=tenant_id, name=f"Client {tenant_id}", aws_account_id="123456789012",
+        region="eu-west-3", role_arn="arn:aws:iam::123456789012:role/rempart",
+        external_id="ext-1", plan="continu", contacts=[{"email": f"ops@{tenant_id}.example"}],
+        monthly_budget_hours=30.0, mandate_status="valid", created_at="2026-01-01T00:00:00Z",
     )
 
 
@@ -61,20 +60,11 @@ def _app_id(tenant_id: str, app_index: int) -> str:
 
 def _application(tenant_id: str, app_index: int) -> Application:
     return Application(
-        app_id=_app_id(tenant_id, app_index),
-        tenant_id=tenant_id,
-        name=f"App {app_index}",
-        criticality="high",
-        internet_exposed=True,
-        data_types=["personal"],
-        environment="staging" if app_index % 2 == 0 else "production",
-        agent_space_id="space-1",
-        domains=[f"app{app_index}.example.com"],
-        repositories=["acme/app"],
-        team="Core",
-        ticket_channel="#app",
-        context={},
-        created_at="2026-01-01T00:00:00Z",
+        app_id=_app_id(tenant_id, app_index), tenant_id=tenant_id, name=f"App {app_index}",
+        criticality="high", internet_exposed=True, data_types=["personal"],
+        environment="staging" if app_index % 2 == 0 else "production", agent_space_id="space-1",
+        domains=[f"app{app_index}.example.com"], repositories=["acme/app"], team="Core",
+        ticket_channel="#app", context={}, created_at="2026-01-01T00:00:00Z",
     )
 
 
@@ -82,44 +72,25 @@ def _finding(tenant_id: str, app_index: int, finding_index: int) -> Finding:
     closed = finding_index % 2 == 0
     return Finding(
         finding_id=f"f-{tenant_id}-{app_index:02d}-{finding_index:02d}",
-        app_id=_app_id(tenant_id, app_index),
-        tenant_id=tenant_id,
+        app_id=_app_id(tenant_id, app_index), tenant_id=tenant_id,
         run_id=f"run-{tenant_id}-{app_index % RUNS_PER_TENANT:02d}",
         fingerprint=f"fp-{tenant_id}-{app_index:02d}-{finding_index:02d}",
-        title=f"Faille {finding_index}",
-        risk_type="IDOR",
-        severity="High",
-        confidence="High",
-        priority=PRIORITIES[finding_index % 4],
-        status="closed" if closed else "new",
-        due_at=DUE_AT,
-        ticket_url=None,
-        remediation_pr_url=None,
-        evidence={"param": "id"},
-        cvss={"score": 8.5},
-        created_at=CREATED_AT,
-        updated_at=CREATED_AT,
-        closed_at=CLOSED_AT if closed else None,
-        closed_by_run_id=None,
+        title=f"Faille {finding_index}", risk_type="IDOR", severity="High",
+        confidence="High", priority=PRIORITIES[finding_index % 4],
+        status="closed" if closed else "new", due_at=DUE_AT, ticket_url=None,
+        remediation_pr_url=None, evidence={"param": "id"}, cvss={"score": 8.5},
+        created_at=CREATED_AT, updated_at=CREATED_AT,
+        closed_at=CLOSED_AT if closed else None, closed_by_run_id=None,
     )
 
 
 def _run(tenant_id: str, run_index: int) -> Run:
     return Run(
-        run_id=f"run-{tenant_id}-{run_index:02d}",
-        config_id="cfg-1",
-        app_id=_app_id(tenant_id, run_index % APPS_PER_TENANT),
-        tenant_id=tenant_id,
-        trigger="cicd",
-        commit_from="aaaaaaa",
-        commit_to="bbbbbbb",
-        scope_decision="diff",
-        status="completed",
-        started_at=STARTED_AT,
-        ended_at="2026-11-03T09:00:00Z",
-        duration_s=3600.0 * (run_index + 1),
-        task_hours=1.0,
-        cost_usd=3.0,
+        run_id=f"run-{tenant_id}-{run_index:02d}", config_id="cfg-1",
+        app_id=_app_id(tenant_id, run_index % APPS_PER_TENANT), tenant_id=tenant_id,
+        trigger="cicd", commit_from="aaaaaaa", commit_to="bbbbbbb", scope_decision="diff",
+        status="completed", started_at=STARTED_AT, ended_at="2026-11-03T09:00:00Z",
+        duration_s=3600.0 * (run_index + 1), task_hours=1.0, cost_usd=3.0,
     )
 
 
@@ -142,44 +113,54 @@ def _seed_fleet(store: Any) -> None:
         _seed_tenant(store, tenant_index)
 
 
-# --------------------------------------------------------------------------- #
-# A DynamoDB fake that behaves like the real one and counts what it reads.
-# --------------------------------------------------------------------------- #
-def _equality(expr: Any) -> tuple[str, Any]:
-    """(attribute, value) of a boto3 equality condition."""
-    key, value = expr.get_expression()["values"]
-    return key.name, value
+def _seed_extras(store: Store) -> None:
+    """2 configs, 13 rapports and 2 decisions of the client ``t-00``."""
+    for i in range(2):
+        store.save_config(TestConfig(
+            config_id=f"cfg-{i}", app_id="app-t-00-00", sa_pentest_id="sa-1",
+            kind="web", scope={}, risk_types=["IDOR"], blocking_threshold="P1",
+            schedule=None,
+        ))
+    for month in range(13):
+        store.save_report(Report(
+            report_id=f"rep-{month}", tenant_id="t-00", period=PERIOD,
+            s3_key=f"reports/{month}.pdf", kpis={}, created_at=CREATED_AT,
+        ))
+    for i in range(2):
+        store.save_decision(Decision(
+            decision_id=f"dec-{i}", finding_id="f-t-00-00-00", author_type="human",
+            author="analyst", action="confirm", justification="ok", created_at=CREATED_AT,
+        ))
 
 
+# --- A DynamoDB fake that behaves like the real one and counts what it reads. ---
 def _key_conditions(expr: Any) -> list[tuple[str, Any]]:
-    """(attribute, value) pairs carried by a boto3 key condition.
-
-    Only the two shapes the store emits are supported: one equality
-    (``Key(a).eq(b)``) and a conjunction of two (``Key(a).eq(b) & Key(c).eq(d)``).
+    """(attribute, value) pairs of a boto3 key condition: ``Key(a).eq(b)``,
+    optionally conjoined (``& Key(c).eq(d)``) — the only shapes store.py emits.
     """
     if expr is None:
         return []
     data = expr.get_expression()
-    if data["operator"] == "AND":
-        return [_equality(part) for part in data["values"]]
-    return [_equality(expr)]
+    parts = data["values"] if data["operator"] == "AND" else [expr]
+    conditions = []
+    for part in parts:
+        key, value = part.get_expression()["values"]
+        conditions.append((key.name, value))
+    return conditions
 
 
 class MeasuringDdbTable(FakeDdbTable):
     """Fake table honouring the GSI key condition and counting items read.
 
-    ``scan`` returns the whole table (as DynamoDB does) and counts every item
-    it reads; ``query`` applies the key condition (as DynamoDB does on a GSI)
-    and counts only the items it returns. The counters make the scan/query
-    difference measurable instead of theoretical.
+    ``scan`` returns and counts the whole table; ``query`` applies the key
+    condition (as DynamoDB does on a GSI) and counts only the items returned.
     """
+
+    PAGE_SIZE: int | None = None  # None = no pagination (the fake has no 1 MB cap)
 
     def __init__(self, name: str) -> None:
         super().__init__(name)
-        self.scan_calls = 0
-        self.query_calls = 0
-        self.items_scanned = 0
-        self.items_queried = 0
+        self.reset_counters()
 
     def reset_counters(self) -> None:
         self.scan_calls = 0
@@ -200,18 +181,9 @@ class MeasuringDdbTable(FakeDdbTable):
     def query(self, **kwargs: Any) -> dict[str, Any]:
         self.query_calls += 1
         matched = self._matching(kwargs)
-        self.items_queried += len(matched)
-        return {"Items": [dict(it) for it in matched]}
-
-
-class PagedDdbTable(MeasuringDdbTable):
-    """Same table, capped at ``PAGE_SIZE`` items per answer (the real 1 MB cap)."""
-
-    PAGE_SIZE = 500
-
-    def query(self, **kwargs: Any) -> dict[str, Any]:
-        self.query_calls += 1
-        matched = self._matching(kwargs)
+        if self.PAGE_SIZE is None:
+            self.items_queried += len(matched)
+            return {"Items": [dict(it) for it in matched]}
         start = int(kwargs.get("ExclusiveStartKey", {}).get("offset", 0))
         page = matched[start : start + self.PAGE_SIZE]
         self.items_queried += len(page)
@@ -221,27 +193,30 @@ class PagedDdbTable(MeasuringDdbTable):
         return res
 
 
+class PagedDdbTable(MeasuringDdbTable):
+    """Same table, capped at ``PAGE_SIZE`` items per answer (the real 1 MB cap)."""
+
+    PAGE_SIZE = 500
+
+
 class MeasuringDdbResource(FakeDdbResource):
-    """Fake boto3 resource handing out :class:`MeasuringDdbTable`."""
+    """Fake boto3 resource handing out counting tables."""
+
+    table_class: type[MeasuringDdbTable] = MeasuringDdbTable
 
     def Table(self, name: str) -> MeasuringDdbTable:  # noqa: N802 (boto3 API)
         if name not in self.tables:
-            self.tables[name] = MeasuringDdbTable(name)
+            self.tables[name] = self.table_class(name)
         return self.tables[name]
 
 
 class PagedDdbResource(MeasuringDdbResource):
-    """Fake boto3 resource handing out :class:`PagedDdbTable`."""
+    """Fake boto3 resource handing out paged counting tables."""
 
-    def Table(self, name: str) -> MeasuringDdbTable:  # noqa: N802 (boto3 API)
-        if name not in self.tables:
-            self.tables[name] = PagedDdbTable(name)
-        return self.tables[name]
+    table_class = PagedDdbTable
 
 
-# --------------------------------------------------------------------------- #
-# Fixtures
-# --------------------------------------------------------------------------- #
+# --- Fixtures ---
 @pytest.fixture(scope="module")
 def fleet_store() -> FakeStore:
     """In-memory store holding the whole fleet (50 clients)."""
@@ -267,9 +242,7 @@ def measured_store() -> tuple[Store, MeasuringDdbResource]:
     return store, ddb
 
 
-# --------------------------------------------------------------------------- #
-# (a) Accuracy: a tenant's KPIs contain nothing from another tenant.
-# --------------------------------------------------------------------------- #
+# --- (a) Accuracy: a tenant's readings contain nothing from another tenant. ---
 def test_kpis_of_a_tenant_match_the_ones_of_a_lone_tenant(fleet_store, solo_store):
     """Every tenant of the fleet gets exactly the KPIs it would get alone."""
     reference = compute_kpis(solo_store, tenant_id="t-00", period=PERIOD)
@@ -282,7 +255,6 @@ def test_kpis_of_a_tenant_match_the_ones_of_a_lone_tenant(fleet_store, solo_stor
 def test_kpi_values_of_one_tenant_are_exact(solo_store):
     """Pin the computed figures: 500 findings, 260 closed, 240 open, 12 runs."""
     kpis = compute_kpis(solo_store, tenant_id="t-00", period=PERIOD)
-
     assert kpis["findings_closed"] == 260
     assert kpis["findings_open_total"] == 240
     assert kpis["findings_open_by_priority"] == {"P1": 0, "P2": 120, "P3": 0, "P4": 120}
@@ -295,10 +267,7 @@ def test_kpi_values_of_one_tenant_are_exact(solo_store):
     assert kpis["critical_blocked_before_prod"] == 0.5
     assert kpis["delivery_to_result_hours"] == 6.5
     assert kpis["mean_time_to_fix_days_by_priority"] == {
-        "P1": 15.0,
-        "P2": 0.0,
-        "P3": 15.0,
-        "P4": 0.0,
+        "P1": 15.0, "P2": 0.0, "P3": 15.0, "P4": 0.0,
     }
     assert kpis["task_hours_used"] == 12.0
     assert kpis["cost_usd"] == 36.0
@@ -320,9 +289,31 @@ def test_listings_of_a_tenant_contain_no_other_tenant(fleet_store):
     assert {r.tenant_id for r in runs} == {"t-07"}
 
 
-# --------------------------------------------------------------------------- #
-# (b) Cost: a tenant-scoped read must not walk the whole fleet.
-# --------------------------------------------------------------------------- #
+def test_audit_journal_of_a_tenant_shows_no_other_tenant(fleet_store):
+    """ENF-SEC-01 : the tenant-scoped journal only shows the tenant's objects.
+
+    ``AuditEvent`` carries no ``tenant_id``: attribution is rebuilt from the
+    objects owned by the tenant (``api/routes/audit.py``).
+    """
+    seeded = [("finding", "f-t-00-00-00"), ("application", "app-t-00-00"),
+              ("budget", "t-00#2026-11"), ("finding", "f-t-01-00-00"),
+              ("finding", "f-inconnu")]  # object of no tenant: invisible everywhere
+    for object_type, object_id in seeded:
+        fleet_store.append_audit("system", "event", object_type, object_id)
+
+    journal = fleet_store.list_audit(limit=100)
+    scoped = {
+        tenant: {e.object_id for e in journal
+                 if belongs_to(e, tenant, tenant_object_ids(fleet_store, tenant))}
+        for tenant in ("t-00", "t-01")
+    }
+
+    assert scoped["t-00"] == {"f-t-00-00-00", "app-t-00-00", "t-00#2026-11"}
+    assert scoped["t-01"] == {"f-t-01-00-00"}
+    assert "f-inconnu" not in scoped["t-00"] | scoped["t-01"]
+
+
+# --- (b) Cost: a tenant-scoped read must not walk the whole fleet. ---
 def test_tenant_scoped_reads_never_scan_the_fleet(measured_store):
     """KPI of one client: indexed reads, zero scan, 500 findings read."""
     store, ddb = measured_store
@@ -343,6 +334,23 @@ def test_tenant_scoped_reads_never_scan_the_fleet(measured_store):
     assert runs_table.items_queried == 12
     assert apps_table.scan_calls == 0
     assert apps_table.items_queried == 20
+
+
+def test_every_indexed_read_costs_its_own_result(measured_store):
+    """configs / reports / decisions: one query per object, never a scan."""
+    store, ddb = measured_store
+    _seed_extras(store)
+    cases = [("scale-test-configs", lambda: store.list_configs("app-t-00-00"), 2),
+             ("scale-reports", lambda: store.list_reports("t-00"), 13),
+             ("scale-decisions", lambda: store.list_decisions("f-t-00-00-00"), 2)]
+
+    for table_name, read, expected in cases:
+        table = ddb.Table(table_name)
+        table.reset_counters()
+
+        assert len(read()) == expected
+        assert table.scan_calls == 0
+        assert table.items_queried == expected
 
 
 def test_fleet_read_still_costs_the_whole_table(measured_store):
@@ -449,3 +457,40 @@ def test_tenant_read_survives_the_one_megabyte_page_cap():
     assert findings_table.scan_calls == 0
     assert findings_table.query_calls == 4
     assert findings_table.items_queried == 2_000
+
+
+# --- (c) The GSI used by store.py must be the one declared in storage.py. ---
+def _declared_gsis() -> dict[str, dict[str, tuple[str, str | None]]]:
+    """{table: {index: (partition key, sort key)}} read from ``TABLE_SPECS``."""
+    tree = ast.parse(STORAGE_PATH.read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.AnnAssign)
+                and getattr(n.target, "id", "") == "TABLE_SPECS")
+    specs = ast.literal_eval(node.value)
+    return {name: {i: (pk, sk) for i, pk, sk in g} for _c, name, _pk, g in specs}
+
+
+def _used_gsis() -> list[tuple[str, str, str, str | None]]:
+    """(table, index, partition key, sort key) of every ``_query_gsi`` call."""
+    src = STORE_PATH.read_text(encoding="utf-8")
+    calls = re.findall(
+        r'_query_gsi\(\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"(?:\s*,\s*[^,()]+,\s*"([^"]+)")?',
+        src,
+    )
+    return [(table, index, pk, sk or None) for table, index, pk, sk in calls]
+
+
+def test_declared_gsis_match_the_queries():
+    """Every GSI queried by store.py is declared in storage.py, with its keys.
+
+    A divergent name fails in production with a ``ValidationException``; the
+    in-memory fake ignores the index, so it would never catch it.
+    """
+    declared = _declared_gsis()
+    used = _used_gsis()
+    assert used, "store.py n'appelle plus _query_gsi : ce test est à revoir"
+
+    for table, index, pk, sk in used:
+        assert index in declared.get(table, {}), f"{table} : index {index!r} non déclaré"
+        assert declared[table][index][0] == pk, f"{table}.{index} : clé de partition divergente"
+        if sk is not None:
+            assert declared[table][index][1] == sk, f"{table}.{index} : clé de tri divergente"

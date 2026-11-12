@@ -43,7 +43,7 @@ ci-dessus ; « après » = coût mesuré par `backend/tests/common/test_scale.py
 |---|---|---|---|---|---|---|---|
 | 1 | **Critique** | `list_findings(tenant_id=…)` | `findings` | GSI `tenant_id-index` déjà provisionné mais jamais utilisé | 1 page = 1 733 items ≈ 866 RCU, **et 93 % de la table invisible** (KPI faux) | 500 items = **250 RCU**, exhaustif | ✅ **Corrigé** : `query` sur `tenant_id-index` + pagination `LastEvaluatedKey` |
 | 2 | **Critique** | `find_by_fingerprint(app_id, fp)` | `findings` | GSI `app_id-fingerprint-index` (PK `app_id`, SK `fingerprint`) déjà provisionné mais jamais utilisé ; appelé **une fois par faille entrante** (`findings_intake.py`) | 1 page ≈ 866 RCU ; le dédoublonnage ratait la faille existante hors page ⇒ doublons | 1 item = **0,5 RCU** | ✅ **Corrigé** : `query` sur `app_id-fingerprint-index` avec PK+SK |
-| 3 | **Critique** | `list_audit(object_id=…)` | `audit` | **Aucun GSI** ; appelé par `already_notified()` pour **chaque faille ouverte à chaque balayage horaire** (EF-COR-06) | 1 page = 5 494 items ≈ 2 747 RCU. Balayage horaire de 2 000 failles ouvertes : 11,0 M items/h ≈ **5,49 M RCU/h (≈ 1 526 RCU/s)** | ~10 items = **5 RCU** ; balayage horaire ≈ 10 000 RCU/h (≈ 2,8 RCU/s) | ✅ **Corrigé** : GSI `object_id-index` **ajouté** dans `storage.py` + `query` |
+| 3 | **Critique** | `list_audit(object_id=…)` | `audit` | **Aucun GSI** ; appelé par `already_notified()` pour **chaque faille ouverte à chaque balayage horaire** (EF-COR-06) | 1 page = 5 494 items ≈ 2 747 RCU. Balayage horaire de 2 000 failles ouvertes : 11,0 M items/h ≈ **5,49 M RCU/h (≈ 1 526 RCU/s)** | mesuré : 2 items pour 2 événements de l'objet ≈ **1 RCU** (~10 événements/objet en prod ≈ 5 RCU) ; balayage horaire ≈ 10 000 RCU/h (≈ 2,8 RCU/s) | ✅ **Corrigé** : GSI `object_id-index` **ajouté** dans `storage.py` + `query` |
 | 4 | Haute | `list_runs(tenant_id=…)` | `runs` | GSI `tenant_id-index` déjà provisionné mais jamais utilisé | 1 page = 2 915 items ≈ 1 457 RCU, 63 % des runs invisibles | ~12 items = **6 RCU** | ✅ **Corrigé** : `query` sur `tenant_id-index` (ou `app_id-index` si seul `app_id` est donné) |
 | 5 | Haute | `list_decisions(finding_id)` | `decisions` | GSI `finding_id-index` déjà provisionné mais jamais utilisé ; appelé par le triage, la mémoire de triage et le pack d'évidence, **par faille** | 1 page = 5 464 items ≈ 2 732 RCU | ~2 items = **1 RCU** | ✅ **Corrigé** : `query` sur `finding_id-index` |
 | 6 | Moyenne | `list_applications(tenant_id)` | `applications` | GSI `tenant_id-index` déjà provisionné mais jamais utilisé | 1 000 items = 500 RCU | 20 items = **10 RCU** | ✅ **Corrigé** : `query` sur `tenant_id-index` |
@@ -83,6 +83,42 @@ Indexes volontairement **non** ajoutés :
 Coût d'écriture du nouvel index : 1 écriture de 182 o par événement d'audit,
 soit ~19 000 écritures/mois au modèle de charge ⇒ négligeable (< 0,01 WCU/s).
 
+### Vérification nom par nom : GSI déclarés vs GSI interrogés
+
+Un GSI interrogé sous un nom différent de celui déclaré échouerait en
+production avec une `ValidationException` — et passerait inaperçu dans les
+tests, car le faux DynamoDB ignore l'index. Les **10 appels à `_query_gsi`**
+(`store.py`) ont donc été confrontés aux **9 GSI de `TABLE_SPECS`**
+(`storage.py`), index par index :
+
+| Table | Index utilisé (`store.py`) | Index déclaré (`storage.py`) | Clé de partition | Clé de tri | Verdict |
+|---|---|---|---|---|---|
+| `applications` | `tenant_id-index` | `tenant_id-index` | `tenant_id` = `tenant_id` | — | conforme |
+| `test-configs` | `app_id-index` | `app_id-index` | `app_id` = `app_id` | — | conforme |
+| `runs` | `tenant_id-index` | `tenant_id-index` | `tenant_id` = `tenant_id` | — | conforme |
+| `runs` | `app_id-index` | `app_id-index` | `app_id` = `app_id` | — | conforme |
+| `findings` | `tenant_id-index` | `tenant_id-index` | `tenant_id` = `tenant_id` | — | conforme |
+| `findings` | `app_id-fingerprint-index` (PK seule, `list_findings(app_id=…)`) | `app_id-fingerprint-index` | `app_id` = `app_id` | omise à l'appel, déclarée `fingerprint` : query PK-seule valide | conforme |
+| `findings` | `app_id-fingerprint-index` (PK+SK, `find_by_fingerprint`) | `app_id-fingerprint-index` | `app_id` = `app_id` | `fingerprint` = `fingerprint` | conforme |
+| `decisions` | `finding_id-index` | `finding_id-index` | `finding_id` = `finding_id` | — | conforme |
+| `reports` | `tenant_id-index` | `tenant_id-index` | `tenant_id` = `tenant_id` | — | conforme |
+| `audit` | `object_id-index` | `object_id-index` | `object_id` = `object_id` | — | conforme |
+
+**Aucune divergence** : 10/10 appels couverts, 9/9 GSI déclarés utilisés (pas
+d'index orphelin). Cette vérification est désormais un test automatisé
+(`test_declared_gsis_match_the_queries`), qui relit les deux fichiers source à
+chaque exécution : si quelqu'un renomme un index d'un côté sans l'autre, la
+suite rougit avant la production.
+
+## Lectures ponctuelles (`get_item`) — pour être exhaustif
+
+Hors `list_*`, le plan de contrôle lit aussi par clé primaire directe :
+`get_tenant`, `get_application`, `get_run`, `get_finding`, `get_report`,
+`get_budget`. Coût : 0,5 RCU par lecture quelle que soit la taille de la table
+(1 item), jamais de scan. À 50 clients comme à 500 : **inévitables et sans
+risque** — aucune action requise. `budget_detail()` (metrics.py) passe par
+`get_tenant` : O(1).
+
 ## Avant / après, mesuré
 
 `backend/tests/common/test_scale.py` peuple 50 clients × 20 applications ×
@@ -117,7 +153,15 @@ la flotte sont égaux, clé par clé, à ceux du même client seul dans son maga
 et les valeurs attendues sont épinglées (260 fermées, 240 ouvertes, couverture
 0,6, médiane 6,5 h, MTTR 15 j sur P1/P3, risque `moderate`). Le `Store` réel
 (chemin `query`) et le `FakeStore` (chemin dictionnaire) produisent les mêmes
-KPI sur trois clients pris dans la flotte.
+KPI sur trois clients pris dans la flotte. Les listes scopées
+(`list_findings`/`list_runs`/`list_applications`) ne renvoient que les lignes du
+client demandé, et le **journal d'audit** scopé par client
+(`tenant_object_ids` + `belongs_to` de `api/routes/audit.py`) n'attribue à un
+client aucun événement d'un autre — y compris les événements pointant vers un
+objet inexistant, invisibles pour tout le monde (ENF-SEC-01 à l'échelle). Les
+lectures indexées restantes (`list_configs` 2 items, `list_reports` 13,
+`list_decisions` 2) sont mesurées au compteur : zéro scan, coût = taille du
+résultat.
 
 ## Scans inévitables : la solution correcte (non implémentée)
 
@@ -200,4 +244,4 @@ JSII_RUNTIME_PACKAGE_CACHE_ROOT=/tmp/rempart/.jsii-cache \
   /tmp/rempart/.venv/bin/python -m pytest tests/common/test_scale.py -q
 ```
 
-11 tests, ~4 s, déterministes, sans réseau ni AWS.
+14 tests, ~2 s, déterministes, sans réseau ni AWS.

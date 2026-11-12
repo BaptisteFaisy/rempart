@@ -9,7 +9,9 @@ export interface Column<T> {
 interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
-  keyField: keyof T;
+  /** Field used as the React key; prefer `rowKey` for rows without a scalar id. */
+  keyField?: keyof T;
+  rowKey?: (row: T, index: number) => string;
   emptyMessage?: string;
   onRowClick?: (row: T) => void;
 }
@@ -18,6 +20,7 @@ export function DataTable<T>({
   columns,
   data,
   keyField,
+  rowKey,
   emptyMessage = 'No records found',
   onRowClick
 }: DataTableProps<T>) {
@@ -28,6 +31,9 @@ export function DataTable<T>({
       </div>
     );
   }
+
+  const keyOf = (row: T, index: number): string =>
+    rowKey ? rowKey(row, index) : String(keyField ? row[keyField] : index);
 
   return (
     <div className="table-container">
@@ -40,15 +46,17 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {data.map((row) => (
+          {data.map((row, index) => (
             <tr
-              key={String(row[keyField])}
+              key={keyOf(row, index)}
               onClick={() => onRowClick?.(row)}
               className={onRowClick ? 'clickable-row' : ''}
             >
               {columns.map((c) => (
                 <td key={c.key}>
-                  {c.render ? c.render(row) : String(row[c.key as keyof T] ?? '—')}
+                  {c.render
+                    ? c.render(row)
+                    : String(row[c.key as keyof T] ?? '—')}
                 </td>
               ))}
             </tr>

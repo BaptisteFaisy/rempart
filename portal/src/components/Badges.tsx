@@ -1,4 +1,4 @@
-import { Priority, FindingStatus, RunStatus } from '../types';
+import { Priority, FindingStatus, RunStatus, MandateStatus } from '../types';
 
 export const PRIORITY_CLASS: Record<Priority, string> = {
   P1: 'badge-p1',
@@ -50,6 +50,23 @@ export function RunStatusBadge({ status }: { status: RunStatus }) {
   return (
     <span className={`badge ${cls}`} data-testid="run-status-badge">
       {status}
+    </span>
+  );
+}
+
+export const MANDATE_STATUS_CLASS: Record<MandateStatus, string> = {
+  none: 'status-danger',
+  pending: 'status-warning',
+  valid: 'status-success',
+  expired: 'status-danger'
+};
+
+/** Test mandate (authorisation to scan) — a run is refused without a valid one. */
+export function MandateBadge({ status }: { status: MandateStatus }) {
+  const cls = MANDATE_STATUS_CLASS[status] ?? 'status-muted';
+  return (
+    <span className={`badge ${cls}`} data-testid="mandate-badge">
+      mandate: {status}
     </span>
   );
 }
