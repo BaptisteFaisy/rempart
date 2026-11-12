@@ -92,6 +92,15 @@ describe('Budget page enrichment', () => {
     );
   });
 
+  it('shows a banner when the global kill-switch is active', async () => {
+    vi.spyOn(portalApi, 'getForecast').mockResolvedValue(FORECAST);
+    vi.spyOn(portalApi, 'getBudget').mockResolvedValue({ ...BUDGET, kill_switch: true });
+    renderPage();
+
+    const banner = await screen.findByTestId('kill-switch-banner');
+    expect(banner.textContent).toContain('aucun test ne sera lancé');
+  });
+
   it('shows a clean message when the frozen dataset has no forecast collection', async () => {
     vi.spyOn(portalApi, 'getForecast').mockResolvedValue(null);
     renderPage();

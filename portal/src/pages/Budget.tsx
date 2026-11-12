@@ -63,6 +63,7 @@ export function Budget() {
   const used = budget.hours_used;
   const pct =
     budget.budget_pct ?? (allocated ? Math.min(100, Math.round((used / allocated) * 100)) : 0);
+  const killSwitch = readBoolean(budget, ['kill_switch']) === true;
 
   return (
     <div className="container">
@@ -74,6 +75,26 @@ export function Budget() {
 
       <TenantPicker tenants={tenants} value={tenantId} onChange={setTenantId} />
       <ActionNotice message={action.message} error={action.error} />
+
+      {killSwitch && (
+        <div
+          className="card"
+          role="alert"
+          data-testid="kill-switch-banner"
+          style={{
+            marginTop: 16,
+            background: 'var(--bg-secondary)',
+            borderColor: 'var(--danger)',
+            borderLeftWidth: 4,
+            borderLeftStyle: 'solid',
+            borderLeftColor: 'var(--danger)',
+            color: 'var(--danger)',
+            fontWeight: 600
+          }}
+        >
+          Kill switch ACTIF — aucun test ne sera lancé
+        </div>
+      )}
 
       <div className="grid-cols-4">
         <KpiCard

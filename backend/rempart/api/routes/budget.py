@@ -11,6 +11,7 @@ from rempart.api.helpers import (
     current_month,
     error_response,
     get_store,
+    kill_switch_active,
     load_tenant_or_404,
     parse_float,
     require_principal,
@@ -79,7 +80,9 @@ def get_budget(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
 
     month = ctx.query.get("month") or current_month()
     state = store.get_budget(tenant_id, month)
-    return 200, budget_payload(state, tenant, budget_verdict(ctx, state, tenant))
+    return 200, budget_payload(
+        state, tenant, budget_verdict(ctx, state, tenant), kill_switch_active(ctx)
+    )
 
 def put_budget(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     """Update budget limits or consumption state for a tenant's month."""
@@ -106,7 +109,9 @@ def put_budget(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     if err:
         return err
 
-    return 200, budget_payload(state, tenant, budget_verdict(ctx, state, tenant))
+    return 200, budget_payload(
+        state, tenant, budget_verdict(ctx, state, tenant), kill_switch_active(ctx)
+    )
 
 def register(router: Router) -> None:
     router.add("GET", "/v1/tenants/:id/budget", get_budget)

@@ -62,6 +62,10 @@ class Settings:
     max_task_hours_per_test: float = 5.0
     # EF-ORC-05 : quota AWS de tests simultanés par compte et par région.
     concurrent_test_quota: int = 5
+    # Coupe-circuit global : quand il est levé, aucun test ne démarre,
+    # indépendamment du mandat, du free tier, du quota, de la fenêtre et du
+    # budget. Sert d'arrêt d'urgence côté exploitation, hors garde-fous.
+    kill_switch: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -81,4 +85,5 @@ class Settings:
             concurrent_test_quota=int(
                 _float("REMPART_CONCURRENT_TEST_QUOTA", 5.0)
             ),
+            kill_switch=_bool("REMPART_KILL_SWITCH", False),
         )
