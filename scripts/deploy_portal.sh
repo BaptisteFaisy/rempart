@@ -10,11 +10,18 @@ BUCKET="${BUCKET:-rempartportalstack-portalbucketf34416c0-eekv0qxwomo8}"
 DISTRIBUTION_ID="${DISTRIBUTION_ID:-EYN0KKBTR7INC}"
 AWS="${AWS:-$HOME/.local/bin/aws}"
 PORTAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/portal"
-# Mode démo hors ligne par défaut : aucun domaine Cognito n'existe encore, le
-# flux PKCE réel est impossible. Voir docs/portal-deployment.md pour activer
-# l'API réelle (VITE_USE_MOCKS=0 VITE_API_URL=… bash scripts/deploy_portal.sh).
-export VITE_USE_MOCKS="${VITE_USE_MOCKS:-1}"
+# Auth Cognito RÉELLE activée le 12/11/2026 (EF-POR-01) : domaine gratuit
+# https://rempart.auth.eu-north-1.amazoncognito.com + client public sans secret.
+# Valeurs publiques (aucun secret), surchargeables par l'environnement.
+# Mode démo : VITE_USE_MOCKS=1, et/ou vider VITE_COGNITO_CLIENT_ID et
+# VITE_COGNITO_DOMAIN → le portail retombe sur le persona picker hors ligne
+# (cognito.ts renvoie null). Voir docs/portal-deployment.md.
+export VITE_USE_MOCKS="${VITE_USE_MOCKS:-0}"
 export VITE_BASE_PATH="${VITE_BASE_PATH:-/}"
+export VITE_API_URL="${VITE_API_URL:-https://qm6dmdkgdg.execute-api.eu-north-1.amazonaws.com}"
+export VITE_COGNITO_DOMAIN="${VITE_COGNITO_DOMAIN:-https://rempart.auth.eu-north-1.amazoncognito.com}"
+export VITE_COGNITO_CLIENT_ID="${VITE_COGNITO_CLIENT_ID:-7qr971kfs2jlj5i2d065mb1fbl}"
+export VITE_COGNITO_REDIRECT_URI="${VITE_COGNITO_REDIRECT_URI:-https://d1o2xnfrq8xomh.cloudfront.net/}"
 
 fail() { echo "ERREUR : $*" >&2; exit 1; }
 
