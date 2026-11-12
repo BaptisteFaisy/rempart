@@ -25,6 +25,18 @@ Detailed architectural specifications: [High-Level Design (HLD)](docs/HLD.md) | 
 
 ---
 
+## 🧑‍⚖️ Judge quickstart — 60 seconds
+
+**Live, free, no AWS account, no cost:** https://tradoooo.github.io/rempart/ — the portal runs in *offline demo mode* on a frozen dataset (0 €, zero customer data on a public URL).
+
+1. Open **`/fleet`** — the MSP cockpit: two demo tenants, headline KPIs, findings by priority.
+2. Look at **`/evidence`** — the sealed evidence dossier with a SHA-256 fingerprint a third party can recompute.
+3. Play the **`/triage`** queue — the LLM triage proposal (P1 priority, 7-day deadline) and the guardrail that forces a Critical finding to a human decision.
+
+Nothing to install, nothing to sign, nothing to pay. Full guided tour for evaluators: **[docs/JUDGES.md](docs/JUDGES.md)**.
+
+---
+
 ## 🏗️ Architecture
 
 AWS Security Agent operates directly inside each customer account to satisfy hard AWS quotas (20 integrations per region, 5 concurrent tests) and maintain strict billing/data isolation. Rempart orchestrates assessments remotely via cross-account IAM roles with `sts:ExternalId`.
