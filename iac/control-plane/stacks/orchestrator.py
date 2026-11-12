@@ -15,6 +15,8 @@ contract test ``tests/iac/test_handler_contract.py`` enforces that invariant.
 
 from __future__ import annotations
 
+import os
+
 import aws_cdk as cdk
 import aws_cdk.aws_dynamodb as ddb
 import aws_cdk.aws_events as events
@@ -92,6 +94,7 @@ class OrchestratorStack(cdk.Stack):
             "REMPART_FREE_TIER_ONLY": "1",
             "REMPART_MAX_TASK_HOURS_PER_TEST": "5",
         }
+        common_env.update(self._llm_env())
         self.lambdas: dict[str, _lambda.Function] = {
             name: self._create_task_lambda(name, common_env, tables) for name in TASK_NAMES
         }
@@ -117,6 +120,31 @@ class OrchestratorStack(cdk.Stack):
             layer = runtime_layer(self, "RempartRuntimeLayer")
             self._runtime_layer_cache = [layer] if layer else []
         return self._runtime_layer_cache
+
+    def _llm_env(self) -> dict[str, str]:
+        """Variables du modèle de triage (EF-TRI-01).
+
+        L'endpoint et la liste de modèles sont publics ; la **clé** vient d'un
+        paramètre SSM SecureString, par référence dynamique CloudFormation :
+        elle n'apparaît jamais dans le template. Sans paramètre fourni, aucune
+        clé n'est posée et le triage garde son repli déterministe — la démo
+        reste donc gratuite.
+        """
+        env = {
+            "REMPART_LLM_BASE_URL": os.environ.get(
+                "REMPART_LLM_BASE_URL", "https://api.inferhub.dev/v1"
+            ),
+            "REMPART_LLM_MODELS": os.environ.get(
+                "REMPART_LLM_MODELS", "combo/cheap,ali/glm-5.2"
+            ),
+        }
+        parameter = os.environ.get("REMPART_LLM_API_KEY_SSM_PARAM")
+        if parameter:
+            reference = cdk.CfnDynamicReference(
+                cdk.CfnDynamicReferenceService.SSM_SECURE, parameter
+            )
+            env["REMPART_LLM_API_KEY"] = reference.to_string()
+        return env
 
     def _create_task_lambda(
         self,

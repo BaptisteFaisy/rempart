@@ -18,6 +18,10 @@ class TriageProposal:
     references: list[str]
     justification: str
     needs_human_validation: bool
+    # Origine du verdict : "model" (proposé par le LLM), "deterministic"
+    # (règleur) ou "memory" (reprise d'un verdict antérieur). Sans cela, on ne
+    # sait pas si une décision vient d'un modèle ou d'un règleur.
+    source: str = "deterministic"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dictionary with camelCase keys matching annexe B."""
@@ -32,6 +36,7 @@ class TriageProposal:
             "references": list(self.references),
             "justification": self.justification,
             "needsHumanValidation": self.needs_human_validation,
+            "source": self.source,
         }
 
     @classmethod
@@ -54,4 +59,6 @@ class TriageProposal:
                 if "needsHumanValidation" in d
                 else d.get("needs_human_validation", False)
             ),
+            # Un dictionnaire ne peut venir que du modèle (l'outil de soumission).
+            source=str(d.get("source") or "model"),
         )

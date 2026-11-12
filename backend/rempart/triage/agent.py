@@ -220,6 +220,36 @@ def _run_strands_agent(ctx: TriageContext, model_client: Any) -> list[TriageProp
     return list(ctx.proposals)
 
 
+def _raw_proposals(
+    findings: list[Finding],
+    app: Application,
+    known_findings: list[Finding],
+    past_decisions: list[Decision],
+    store: Any,
+    ctx: TriageContext,
+    model_client: Any,
+) -> list[TriageProposal]:
+    """Propositions brutes : modèle réel si fourni, sinon règleur déterministe.
+
+    Si TOUS les fournisseurs du routeur sont indisponibles (quota, cooldown,
+    prix), on repasse au règleur : le triage n'est jamais perdu, et il reste
+    correct et vérifiable.
+    """
+    if _strands_available() and _is_real_strands_model(model_client):
+        try:
+            raw_proposals = _run_strands_agent(ctx, model_client)
+        except Exception:  # noqa: BLE001 — un modèle saturé ne doit pas casser le lot
+            return _deterministic_triage(
+                findings, app, known_findings, past_decisions, store=store
+            )
+        for proposal in raw_proposals:
+            proposal.source = "model"
+        return raw_proposals
+    return _deterministic_triage(
+        findings, app, known_findings, past_decisions, store=store
+    )
+
+
 def run_triage(
     *,
     findings: list[Finding],
@@ -246,12 +276,9 @@ def run_triage(
         past_decisions=past_decisions,
     )
 
-    if _strands_available() and _is_real_strands_model(model_client):
-        raw_proposals = _run_strands_agent(ctx, model_client)
-    else:
-        raw_proposals = _deterministic_triage(
-            findings, app, known_findings, past_decisions, store=store
-        )
+    raw_proposals = _raw_proposals(
+        findings, app, known_findings, past_decisions, store, ctx, model_client
+    )
 
     proposals_by_id = {p.finding_id: p for p in raw_proposals}
     known_by_fp = _index_known_findings(known_findings, app.app_id)
@@ -264,5 +291,8 @@ def run_triage(
                 f, known_findings=known_findings, past_decisions=past_decisions, store=store
             )
             prop = _deterministic_proposal(f, app, known_by_fp, match)
+            # Aucun verdict du modèle pour cette faille : on rejoue un verdict
+            # antérieur retrouvé par mémoire, et la provenance est tracée.
+            prop.source = "memory" if match else "deterministic"
         enforced.append(enforce(prop, f, app, known_findings=known_findings, store=store))
     return enforced
