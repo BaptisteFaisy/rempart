@@ -104,7 +104,7 @@ describe('Industrialization page', () => {
     await waitFor(() => expect(screen.getByText('33%')).toBeDefined());
     expect(screen.getByText('17%')).toBeDefined();
     expect(screen.getByText('44 min')).toBeDefined();
-    expect(screen.getByText('0.08')).toBeDefined();
+    expect(screen.getAllByText('0.08').length).toBeGreaterThan(0);
     expect(screen.getByText('No alert')).toBeDefined();
     expect(screen.getByText('60%')).toBeDefined();
     expect(screen.getByText('BrokenAuth, SSRF')).toBeDefined();

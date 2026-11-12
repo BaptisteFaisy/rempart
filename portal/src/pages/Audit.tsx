@@ -38,15 +38,6 @@ export function AuditPage() {
     [tenantId, filters.action, filters.actor, filters.objectType]
   );
 
-  const columns: Column<AuditEvent>[] = [
-    { key: 'created_at', header: 'When' },
-    { key: 'actor', header: 'Actor' },
-    { key: 'action', header: 'Action' },
-    { key: 'object_type', header: 'Object type' },
-    { key: 'object_id', header: 'Object' },
-    { key: 'result', header: 'Result' }
-  ];
-
   return (
     <div className="container">
       <h1 style={{ marginBottom: 8 }}>Audit Journal</h1>
@@ -59,43 +50,16 @@ export function AuditPage() {
       </p>
 
       <TenantPicker tenants={tenants} value={tenantId} onChange={setTenantId} allowAll />
-
-      <Card title="Filters">
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <FilterField
-            id="audit-filter-action"
-            label="Action"
-            value={draft.action}
-            onChange={(v) => setDraft({ ...draft, action: v })}
-          />
-          <FilterField
-            id="audit-filter-actor"
-            label="Actor"
-            value={draft.actor}
-            onChange={(v) => setDraft({ ...draft, actor: v })}
-          />
-          <FilterField
-            id="audit-filter-object"
-            label="Object type"
-            value={draft.objectType}
-            onChange={(v) => setDraft({ ...draft, objectType: v })}
-          />
-          <button className="btn btn-primary" onClick={() => setFilters(draft)}>
-            Apply filters
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              setDraft(EMPTY_FILTERS);
-              setFilters(EMPTY_FILTERS);
-            }}
-          >
-            Reset
-          </button>
-        </div>
-      </Card>
-
-      {error ? <div className="card" style={{ marginTop: 16 }}>{error}</div> : null}
+      <AuditFilters
+        draft={draft}
+        onDraft={setDraft}
+        onApply={() => setFilters(draft)}
+        onReset={() => {
+          setDraft(EMPTY_FILTERS);
+          setFilters(EMPTY_FILTERS);
+        }}
+      />
+      {error ? <div className="card">{error}</div> : null}
 
       {loading ? (
         <div style={{ marginTop: 16 }}>Loading audit journal...</div>
@@ -104,37 +68,64 @@ export function AuditPage() {
           <DataUnavailable feature="Audit journal" datasetKey="audit" />
         </div>
       ) : (
-        <AuditResults page={data} columns={columns} />
+        <AuditResults page={data} />
       )}
     </div>
   );
 }
 
-function FilterField(props: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
+interface AuditFiltersProps {
+  draft: Filters;
+  onDraft: (filters: Filters) => void;
+  onApply: () => void;
+}
+
+function AuditFilters({ draft, onDraft, onApply }: AuditFiltersProps) {
+  const fields: { id: string; label: string; key: keyof Filters }[] = [
+    { id: 'audit-filter-action', label: 'Action', key: 'action' },
+    { id: 'audit-filter-actor', label: 'Actor', key: 'actor' },
+    { id: 'audit-filter-object', label: 'Object type', key: 'objectType' }
+  ];
   return (
-    <div className="form-group" style={{ marginBottom: 0, minWidth: 180 }}>
-      <label htmlFor={props.id}>{props.label}</label>
-      <input
-        id={props.id}
-        className="form-control"
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        placeholder={`${props.label} (exact match)`}
-      />
-    </div>
+    <Card title="Filters">
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        {fields.map((field) => (
+          <div key={field.id} className="form-group" style={{ marginBottom: 0, minWidth: 180 }}>
+            <label htmlFor={field.id}>{field.label}</label>
+            <input
+              id={field.id}
+              className="form-control"
+              value={draft[field.key]}
+              onChange={(e) => onDraft({ ...draft, [field.key]: e.target.value })}
+              placeholder={`${field.label} (exact match)`}
+            />
+          </div>
+        ))}
+        <button className="btn btn-primary" onClick={onApply}>
+          Apply filters
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => {
+            onDraft(EMPTY_FILTERS);
+            onApply();
+          }}
+        >
+          Reset
+        </button>
+      </div>
+    </Card>
   );
 }
 
-function AuditResults(props: {
-  page: { events: AuditEvent[]; count: number; total: number; scan_truncated?: boolean };
-  columns: Column<AuditEvent>[];
-}) {
-  const { page, columns } = props;
+interface JournalPage {
+  events: AuditEvent[];
+  count: number;
+  total: number;
+  scan_truncated?: boolean;
+}
+
+function AuditResults({ page }: { page: JournalPage }) {
   return (
     <div style={{ marginTop: 16 }}>
       <div className="grid-cols-4">
@@ -149,8 +140,17 @@ function AuditResults(props: {
         <KpiCard label="Writable" value="NO" sub="Read-only journal" tone="good" />
       </div>
       <Card title={`Journal entries (${page.count})`} style={{ marginTop: 16 }}>
-        <DataTable columns={columns} data={page.events} keyField="audit_id" />
+        <DataTable columns={COLUMNS} data={page.events} keyField="audit_id" />
       </Card>
     </div>
   );
 }
+
+const COLUMNS: Column<AuditEvent>[] = [
+  { key: 'created_at', header: 'When' },
+  { key: 'actor', header: 'Actor' },
+  { key: 'action', header: 'Action' },
+  { key: 'object_type', header: 'Object type' },
+  { key: 'object_id', header: 'Object' },
+  { key: 'result', header: 'Result' }
+];

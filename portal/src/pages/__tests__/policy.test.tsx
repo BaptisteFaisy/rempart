@@ -75,7 +75,7 @@ describe('Policy page', () => {
     mockReads(POLICY);
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId('policy-read-only')).toBeDefined());
+    await waitFor(() => expect(screen.getByTestId('policy-readonly-note')).toBeDefined());
     expect(screen.getAllByText('7 days').length).toBeGreaterThan(0);
     expect(screen.getAllByText('no deadline').length).toBeGreaterThan(0);
     expect(screen.getAllByText('High').length).toBeGreaterThan(0);
