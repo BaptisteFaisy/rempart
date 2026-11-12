@@ -50,6 +50,7 @@ class FakeSecurityAgentClient:
         self.pentests: dict[str, dict[str, Any]] = {}
         self.jobs: dict[str, dict[str, Any]] = {}
         self.findings_by_job: dict[str, list[dict[str, Any]]] = {}
+        self.finding_details: dict[str, dict[str, Any]] = {}
         self.job_outcomes: dict[str, str] = {}  # pentestJobId -> COMPLETED | FAILED
         self.default_outcome = "COMPLETED"
         # Réglage de scénario : les heures consommées d'UNE tâche du job.
@@ -253,7 +254,10 @@ class FakeSecurityAgentClient:
         if pentest_job_id and code_review_job_id:
             raise ValueError("pentestJobId et codeReviewJobId sont mutuellement exclusifs")
         job_id = pentest_job_id or ""
-        return list(self.findings_by_job.get(job_id, []))
+        return [
+            {**summary, "agentSpaceId": space_id}
+            for summary in self.findings_by_job.get(job_id, [])
+        ]
 
     def seed_finding(
         self,
@@ -266,21 +270,61 @@ class FakeSecurityAgentClient:
         parameter: str | None = None,
         title: str = "Test Finding",
         description: str = "Detailed description",
+        line_start: int = 1,
+        line_end: int = 1,
     ) -> dict[str, Any]:
-        """Ajoute une faille au scénario d'un job (aide de test, hors API réelle)."""
-        f = {
-            "findingId": f"sa-f-{uuid.uuid4().hex[:8]}",
-            "title": title,
-            "severity": severity,
-            "confidence": confidence,
+        """Ajoute une faille au scénario d'un job — aux FORMES OFFICIELLES.
+
+        `ListFindings` ne renvoie que des `FindingSummary` (nom, niveau de
+        risque, type de risque, confiance) : ni `entryPoint`, ni `parameter`,
+        ni `description`. Le détail vient de `BatchGetFindings`. Un double qui
+        renvoyait les champs d'un ancien modèle a laissé passer l'empreinte
+        dégénérée (21 failles réelles → 3 créées, 18 jetées comme doublons).
+        """
+        finding_id = f"sa-f-{uuid.uuid4().hex[:8]}"
+        summary = {
+            "findingId": finding_id,
+            "pentestJobId": job_id,
+            "name": title,
+            "status": "ACTIVE",
             "riskType": risk_type,
-            "entryPoint": entry_point,
-            "parameter": parameter,
-            "description": description,
-            "cvss": {"score": 7.5},
+            "riskLevel": str(severity).upper(),
+            "confidence": str(confidence).upper(),
+            "validationStatus": "NOT_VALIDATED",
         }
-        self.findings_by_job.setdefault(job_id, []).append(f)
-        return f
+        detail = {
+            **summary,
+            "description": description,
+            "codeLocations": [
+                {
+                    "filePath": entry_point,
+                    "lineStart": line_start,
+                    "lineEnd": line_end,
+                    "label": parameter,
+                }
+            ],
+            "riskScore": "7.5",
+        }
+        self.findings_by_job.setdefault(job_id, []).append(summary)
+        self.finding_details[finding_id] = detail
+        return summary
+
+    def batch_get_findings(
+        self, space_id: str, finding_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """BatchGetFindings — le détail des failles (description, codeLocations)."""
+        self._require(
+            "BatchGetFindings", {"agentSpaceId": space_id}, ("agentSpaceId",)
+        )
+        details = []
+        for finding_id in finding_ids:
+            detail = self.finding_details.get(finding_id)
+            if detail is not None:
+                details.append({**detail, "agentSpaceId": space_id})
+        self.calls.append(
+            ("batch_get_findings", {"agentSpaceId": space_id, "findingIds": list(finding_ids)})
+        )
+        return details
 
     def update_finding(self, space_id: str, finding_id: str, **kw: Any) -> dict[str, Any]:
         self._require(

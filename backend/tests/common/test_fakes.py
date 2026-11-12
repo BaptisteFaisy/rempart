@@ -33,8 +33,23 @@ def test_fake_security_agent_client_lifecycle():
     )
     findings = sa.list_findings(space_id, pentest_job_id=job_id)
     assert len(findings) == 1
+    # Forme OFFICIELLE d'un FindingSummary : ni `entryPoint`, ni `parameter`,
+    # ni `description` (ils n'existent pas dans l'API réelle).
     assert findings[0]["riskType"] == "IDOR"
-    assert findings[0]["parameter"] == "id"
+    assert findings[0]["riskLevel"] == "HIGH"
+    assert findings[0]["confidence"] == "HIGH"
+    assert findings[0]["name"] == "Bypass tenant check"
+    assert findings[0]["agentSpaceId"] == space_id
+    assert "entryPoint" not in findings[0]
+    assert "parameter" not in findings[0]
+    assert "description" not in findings[0]
+
+    # Le DÉTAIL vient de BatchGetFindings : description et emplacement réel.
+    details = sa.batch_get_findings(space_id, [findings[0]["findingId"]])
+    assert len(details) == 1
+    assert details[0]["description"] == "Detailed description"
+    assert details[0]["codeLocations"][0]["filePath"] == "/orders/{id}"
+    assert details[0]["codeLocations"][0]["label"] == "id"
 
     batch = sa.batch_get_pentest_jobs(space_id, [job_id])
     assert len(batch) == 1

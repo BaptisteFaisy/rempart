@@ -20,7 +20,7 @@ corrigés et redéployés ce jour-là.
 |---|---|---|---|
 | D1 — heures-tâches | `poll_run` stockait `task_hours=0.0` alors que 0,005731 h étaient disponibles | `387c286` (`ListPentestJobTasks`) | **P6** — heures du mois recalculées depuis `rempart-runs` = heures de la prévision ; **P6b** — jours écoulés = jour du mois |
 | D2 — casse des énumérations | 0 P1/P2, 0 échéance, 0 garde-fou EF-TRI-05 sur 21 failles réelles | `387c286` (normalisation à la frontière) | **P5.forecast.champs** — la prévision est servie avec les champs du modèle ; la matrice est couverte par 42 tests unitaires |
-| D3 — empreinte dégénérée | 21 failles réelles → 3 créées, 18 avalées « doublons » | *ouvert* (enrichissement `BatchGetFindings` à faire) | — (un `xfail` documente le défaut restant) |
+| D3 — empreinte dégénérée | 21 failles réelles → **3 créées, 18 avalées « doublons »** | `à venir` (empreinte sur `codeLocations` + `BatchGetFindings`) | **PREUVE D3** — 21/21 créées, 0 doublon (voir §PREUVE D3 ci-dessous) |
 | D4 — dossier de preuves jamais stocké | `POST /evidence` → 201 + `s3_key` morte (aucun bucket dans le compte) | `9e41634` + `303610e` (bucket SSE-S3, `REMPART_REPORTS_BUCKET`) | **P4** / **P4b** / **P4c** (objet présent) / **P4d** (empreinte recalculée depuis l'objet retéléchargé = identique) |
 | D5 — fenêtres de test inatteignables | `budget_gate` → `outside_test_window` pour toute app créée par l'API | `9e41634` (`test_windows` + `PUT /v1/applications/{id}`) | **P7** — la route de mise à jour existe (404 « Application », pas « route inconnue ») |
 | D6 — le code ne compilait pas | `npm run build` en échec (`Audit.tsx` TS2322), `ci-portal` et `deploy-pages` rouges sur 3 pushes | `b9831d4` | **P11** / **P11b** — le bundle servi contient bien les 5 pages de gouvernance ; **P10** — la Lambda déployée est postérieure au correctif |
@@ -30,7 +30,36 @@ corrigés et redéployés ce jour-là.
 | D10 — portail non authentifié | « API unreachable (Failed to fetch). Is scripts/serve_local.py running? » | `caa48da` (porte d'authentification) | **P11** (200) + **P11c** (le site public reste fonctionnel) |
 | CORS en libre | `Access-Control-Allow-Origin: *` sur toutes les réponses | `9e41634` + `303610e` | **P9** — une origine non autorisée ne reçoit aucun ACAO |
 
-## Les 28 preuves, et leur valeur observée
+
+## PREUVE D3 — les 21 vraies failles ne sont plus avalées
+
+Rejoué sur le **banc réel** (vrai client boto3 `securityagent` au modèle officiel,
+vrai DynamoDB Local, vraies failles issues d'avis GHSA et de sondes HTTP réelles),
+avec le code corrigé :
+
+```
+lambda:poll_run        task_hours=0.005731   budget_pct=0.01     ← D1 : les heures réelles remontent
+lambda:collect_findings 21 failles servies → created=21, duplicates=0, regressions=0
+                                                   ↑ D3 : avant 3 créées / 18 perdues
+lambda:dispatch_triage  triaged=21, queued=5, confirmed=16
+                                        ↑ D2 : 5 Critical/High en validation humaine (avant 0)
+```
+
+Et l'expérience A/B sur les mêmes failles, seule la casse change :
+
+| | avant le correctif | après le correctif |
+|---|---|---|
+| failles classées P1/P2 (énums **réels** de l'API) | 0 | **19** |
+| échéances contractuelles posées | 0 | **19** |
+| garde-fou EF-TRI-05 déclenché | 0 | **5** |
+|idem avec la casse des doubles de test | 19 / 19 / 5 | 19 / 19 / 5 → **l'écart est fermé** |
+
+Ce que ça change en production : 86 % des failles qui disparaissaient
+silencieusement sont conservées, les échéances contractuelles existent enfin,
+et le garde-fou qui interdit au modèle d'écarter seul un Critical/High
+retrouve son effectivité.
+
+## Les preuves, et leur valeur observée
 
 | Preuve | Valeur observée |
 |---|---|

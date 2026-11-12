@@ -22,7 +22,9 @@ ACCOUNT="${ACCOUNT:-710332178565}"
 API_ID="${API_ID:-qm6dmdkgdg}"
 PORTAL_ORIGIN="${PORTAL_ORIGIN:-https://d1o2xnfrq8xomh.cloudfront.net}"
 AWS="${AWS:-$HOME/.local/bin/aws}"
-STACKS=("RempartStorageStack" "RempartApiStack")
+# L'orchestrateur est inclus : l'intake des failles (`collect_findings`) et
+# l'agent de triage y vivent, pas dans la Lambda API.
+STACKS=("RempartStorageStack" "RempartApiStack" "RempartOrchestratorStack")
 
 export CDK_DEFAULT_ACCOUNT="$ACCOUNT"
 export CDK_DEFAULT_REGION="$REGION"
@@ -104,3 +106,10 @@ if [ -z "$MISSING" ]; then
 else
   echo "  PREUVE ÉCHEC            : variables manquantes :$MISSING"
 fi
+
+# Tâches de l'orchestrateur : leur code porte l'intake des failles (empreinte
+# calculée sur l'emplacement réel) et la lecture des heures-tâches.
+TASK_COUNT="$("$AWS" lambda list-functions --region "$REGION" \
+  --query "length(Functions[?starts_with(FunctionName, 'RempartOrchestratorStack')])" \
+  --output text 2>/dev/null || echo '?')"
+echo "  Lambdas orchestrateur : $TASK_COUNT"
