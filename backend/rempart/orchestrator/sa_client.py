@@ -192,6 +192,23 @@ class SecurityAgentClient:
         resp = self.client.list_findings(**body)
         return list(resp.get("findingsSummaries", []))
 
+    def batch_get_findings(
+        self,
+        space_id: str,
+        finding_ids: Sequence[str],
+    ) -> list[dict[str, Any]]:
+        """BatchGetFindings — requis : ``agentSpaceId``, ``findingIds`` (tableau).
+
+        Liste documentée : ``findings`` (objets `Finding` : `description`,
+        `codeLocations`, `riskScore`, `reasoning`). C'est la SEULE source des
+        détails d'une faille : `ListFindings` ne renvoie que des `FindingSummary`
+        (nom, niveau de risque, type de risque, confiance).
+        """
+        body = {"agentSpaceId": space_id, "findingIds": list(finding_ids)}
+        require_params("BatchGetFindings", body, ("agentSpaceId", "findingIds"))
+        resp = self.client.batch_get_findings(**body)
+        return list(resp.get("findings", []))
+
     def update_finding(self, space_id: str, finding_id: str, **kw: Any) -> dict[str, Any]:
         """UpdateFinding — requis : ``agentSpaceId``, ``findingId``. Corps de réponse vide."""
         body = {"agentSpaceId": space_id, "findingId": finding_id, **kw}

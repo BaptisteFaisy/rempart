@@ -22,7 +22,9 @@ ACCOUNT="${ACCOUNT:-710332178565}"
 API_ID="${API_ID:-qm6dmdkgdg}"
 PORTAL_ORIGIN="${PORTAL_ORIGIN:-https://d1o2xnfrq8xomh.cloudfront.net}"
 AWS="${AWS:-$HOME/.local/bin/aws}"
-STACKS=("RempartStorageStack" "RempartApiStack")
+# L'orchestrateur est inclus : l'intake des failles (`collect_findings`) et
+# l'agent de triage y vivent, pas dans la Lambda API.
+STACKS=("RempartStorageStack" "RempartApiStack" "RempartOrchestratorStack")
 
 export CDK_DEFAULT_ACCOUNT="$ACCOUNT"
 export CDK_DEFAULT_REGION="$REGION"
@@ -64,6 +66,17 @@ cdk deploy "${STACKS[@]}" --require-approval never
 echo
 log "== Preuve du déploiement =="
 COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'inconnu')"
+# Le code que l'on s'apprête à déployer doit être celui de main : un commit
+# oublié sur un HEAD détaché (ou une branche non poussée) se voit ici avant
+# d'écraser la production. C'est exactement ce qui a failli se produire le
+# 12/11/2026 (deux correctifs déployés mais absents de main).
+git -C "$REPO_ROOT" fetch -q origin main 2>/dev/null || true
+if git -C "$REPO_ROOT" diff --quiet origin/main -- backend iac 2>/dev/null; then
+  echo "  PREUVE OK               : le code à déployer est identique à main (backend + iac)"
+else
+  echo "  PREUVE ÉCHEC            : le code à déployer diffère de main (commit non fusionné)"
+  git -C "$REPO_ROOT" diff --stat origin/main -- backend iac | tail -8
+fi
 FUNCTION_NAME="$("$AWS" lambda list-functions --region "$REGION" \
   --query "Functions[?starts_with(FunctionName, 'RempartApiStack-RempartApiFunction')].FunctionName | [0]" \
   --output text 2>/dev/null || echo '')"
@@ -104,3 +117,10 @@ if [ -z "$MISSING" ]; then
 else
   echo "  PREUVE ÉCHEC            : variables manquantes :$MISSING"
 fi
+
+# Tâches de l'orchestrateur : leur code porte l'intake des failles (empreinte
+# calculée sur l'emplacement réel) et la lecture des heures-tâches.
+TASK_COUNT="$("$AWS" lambda list-functions --region "$REGION" \
+  --query "length(Functions[?starts_with(FunctionName, 'RempartOrchestratorStack')])" \
+  --output text 2>/dev/null || echo '?')"
+echo "  Lambdas orchestrateur : $TASK_COUNT"

@@ -8,6 +8,7 @@ sauf la génération du dossier).
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from rempart.api.app import lambda_handler
@@ -30,6 +31,24 @@ def _call(store, method, path, claims, body=None, query=None, s3=None):
     resp = lambda_handler(event, None, store=store, sa=None, s3=s3)
     payload = json.loads(resp["body"]) if resp.get("body") else {}
     return resp["statusCode"], payload
+
+
+def test_get_evidence_returns_a_sealed_pack_with_a_recomputable_fingerprint():
+    """La preuve annoncée par la page du portail doit être LÀ, recalculable.
+
+    Avant : la route renvoyait le dossier NON scellé et le portail affichait
+    « Integrity fingerprint — not available from the API ».
+    """
+    store = seed_two_tenants()
+    status, pack = _call(store, "GET", f"/v1/tenants/{TENANT_A}/evidence", analyst_claims())
+    assert status == 200
+    integrity = pack.get("integrity") or {}
+    assert integrity.get("algorithm") == "sha256"
+    assert len(integrity.get("digest", "")) == 64
+    # Recalcul indépendant : sha256 du JSON canonique, champs non probants exclus.
+    payload = {k: v for k, v in pack.items() if k not in ("integrity", "s3_key")}
+    canonical = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, default=str)
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == integrity["digest"]
 
 
 def test_get_evidence_returns_a_self_contained_pack():
