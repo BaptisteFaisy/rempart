@@ -25,9 +25,9 @@ TENANT_A = "t-a"
 TENANT_B = "t-b"
 
 
-def _call(store, method, path, claims, body=None, query=None):
+def _call(store, method, path, claims, body=None, query=None, s3=None):
     event = make_event(method, path, claims=claims, body=body, query=query)
-    resp = lambda_handler(event, None, store=store, sa=None)
+    resp = lambda_handler(event, None, store=store, sa=None, s3=s3)
     payload = json.loads(resp["body"]) if resp.get("body") else {}
     return resp["statusCode"], payload
 
@@ -53,8 +53,9 @@ def test_get_evidence_accepts_an_explicit_period():
 
 def test_post_evidence_seals_the_pack_with_a_recomputable_digest():
     store = seed_two_tenants()
+    s3 = FakeS3()
     status, sealed = _call(
-        store, "POST", f"/v1/tenants/{TENANT_A}/evidence", analyst_claims()
+        store, "POST", f"/v1/tenants/{TENANT_A}/evidence", analyst_claims(), s3=s3
     )
     assert status == 201
     digest = sealed["integrity"]["digest"]
@@ -64,9 +65,44 @@ def test_post_evidence_seals_the_pack_with_a_recomputable_digest():
     assert integrity_digest(payload) == digest
 
 
+def test_post_evidence_stores_the_sealed_pack_and_it_stays_verifiable():
+    """Le dossier réellement STOCKÉ doit rester vérifiable par un tiers.
+
+    Régression verrouillée : un auditeur récupère l'objet, retire les champs non
+    probants (`integrity`, `s3_key`) et recalcule le SHA-256. Si un champ ajouté
+    après scellement entrait dans le hachage, ce test échouerait.
+    """
+    store = seed_two_tenants()
+    s3 = FakeS3()
+    status, sealed = _call(
+        store, "POST", f"/v1/tenants/{TENANT_A}/evidence", analyst_claims(), s3=s3
+    )
+    assert status == 201
+    stored = next(iter(s3.objects.values()))
+    downloaded = json.loads(stored.body.decode("utf-8"))
+    recomputed = integrity_digest(
+        {k: v for k, v in downloaded.items() if k not in ("integrity", "s3_key")}
+    )
+    assert downloaded["integrity"]["digest"] == recomputed == sealed["integrity"]["digest"]
+
+
+def test_post_evidence_without_storage_answers_501_not_a_dead_key():
+    """Sans bucket configuré : 501 explicite, jamais 201 avec une clé morte."""
+    store = seed_two_tenants()
+    status, payload = _call(
+        store, "POST", f"/v1/tenants/{TENANT_A}/evidence", analyst_claims()
+    )
+    assert status == 501
+    assert "s3_key" not in payload
+    actions = [e.action for e in store.list_audit()]
+    assert "evidence.storage_unavailable" in actions
+
+
 def test_post_evidence_writes_an_audit_entry():
     store = seed_two_tenants()
-    _call(store, "POST", f"/v1/tenants/{TENANT_A}/evidence", analyst_claims())
+    _call(
+        store, "POST", f"/v1/tenants/{TENANT_A}/evidence", analyst_claims(), s3=FakeS3()
+    )
     actions = [e.action for e in store.list_audit()]
     assert "evidence.generated" in actions
 

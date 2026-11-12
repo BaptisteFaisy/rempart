@@ -21,6 +21,12 @@ class ApiContext:
     store: Store | None = None
     settings: Settings | None = None
     sa: Any = None
+    # Client S3 du dossier de preuves (EF-RAP-04) : `None` quand aucun bucket
+    # n'est configuré — la route répond alors 501 au lieu d'annoncer une clé
+    # qui ne pointe vers rien.
+    s3: Any = None
+    # Origine de la requête, pour un CORS restreint aux origines autorisées.
+    origin: str | None = None
 
     def audit(
         self,

@@ -19,6 +19,7 @@ from rempart.api.context import ApiContext
 from rempart.api.helpers import (
     authorize,
     current_month,
+    error_response,
     get_store,
     load_tenant_or_404,
     require_principal,
@@ -71,7 +72,12 @@ def get_evidence(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
 
 
 def post_evidence(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
-    """`POST /v1/tenants/{id}/evidence` — génère, scelle (SHA-256) et renvoie."""
+    """`POST /v1/tenants/{id}/evidence` — génère, scelle (SHA-256) et renvoie.
+
+    Sans bucket configuré (`REMPART_REPORTS_BUCKET`), la route répond **501** :
+    annoncer 201 avec une clé S3 alors que rien n'est téléversé ferait croire à
+    un auditeur que le dossier est conservé et vérifiable.
+    """
     principal, err = require_principal(ctx)
     if err:
         return err
@@ -83,12 +89,20 @@ def post_evidence(ctx: ApiContext) -> tuple[int, dict[str, Any]]:
     _tenant, err = load_tenant_or_404(store, tenant_id)
     if err:
         return err
+    if getattr(ctx, "s3", None) is None:
+        ctx.audit("evidence.storage_unavailable", "tenant", tenant_id, result="denied")
+        return error_response(
+            "Stockage des dossiers de preuves non configuré : le dossier ne peut "
+            "pas être conservé. Utilisez GET pour le consulter sans scellement "
+            "stocké.",
+            501,
+        )
     period = _period(ctx)
     sealed = build_and_upload(
         store=store,
         tenant_id=tenant_id,
         period=period,
-        s3=getattr(ctx, "s3", None),
+        s3=ctx.s3,
     )
     ctx.audit("evidence.generated", "tenant", tenant_id)
     return 201, sealed
