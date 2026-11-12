@@ -70,7 +70,9 @@ class ApiStack(cdk.Stack):
             self,
             "RempartApiFunction",
             handler="rempart.api.app.lambda_handler",
-            environment=self._environment(table_prefix, hourly_rate, reports_bucket, pipeline_key_param),
+            environment=self._environment(
+                table_prefix, hourly_rate, reports_bucket, pipeline_key_param
+            ),
             layers=self._layers(),
             timeout_seconds=30,
             memory_size=1024,
