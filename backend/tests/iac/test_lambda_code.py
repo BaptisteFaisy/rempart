@@ -134,3 +134,58 @@ def test_placeholder_string_is_gone_from_helpers():
     source = Path(_helpers.__file__).read_text(encoding="utf-8")
     for marker in PLACEHOLDER_MARKERS:
         assert marker not in source, f"le placeholder « {marker} » est revenu"
+
+
+# --------------------------------------------------------------------------- #
+# Fail-fast du layer : incident réel du 11 nov 2026 (compte 710332178565).
+# `runtime_layer()` rendait None silencieusement quand le layer n'était pas
+# construit ; le `cdk deploy` a créé 11 Lambdas avec layers=[] et la première
+# invocation a échoué en `Runtime.ImportModuleError: No module named 'requests'`.
+# Le synth passait, le déploiement réussissait, toutes les fonctions étaient
+# mortes. Ces tests verrouillent l'erreur explicite.
+# --------------------------------------------------------------------------- #
+def test_missing_layer_raises_unless_explicitly_allowed(monkeypatch, tmp_path):
+    """Sans layer et sans échappatoire explicite : erreur actionnable, pas None."""
+    import stacks._helpers as helpers
+
+    monkeypatch.setattr(helpers, "LAMBDA_LAYER_DIR", tmp_path / "absent")
+    monkeypatch.delenv("REMPART_ALLOW_MISSING_LAYER", raising=False)
+
+    app = cdk.App()
+    stack = cdk.Stack(app, "LayerFailFast")
+    with pytest.raises(RuntimeError) as exc:
+        helpers.runtime_layer(stack, "MissingLayer")
+
+    message = str(exc.value)
+    # Le message doit dire quoi faire, pas seulement ce qui manque.
+    assert "build_lambda_layer.sh" in message
+    assert "REMPART_ALLOW_MISSING_LAYER=1" in message
+    assert "ImportModuleError" in message
+
+
+def test_missing_layer_allowed_for_synth_only(monkeypatch, tmp_path):
+    """L'échappatoire existe pour la synthèse (tests, cdk synth) uniquement."""
+    import stacks._helpers as helpers
+
+    monkeypatch.setattr(helpers, "LAMBDA_LAYER_DIR", tmp_path / "absent")
+    monkeypatch.setenv("REMPART_ALLOW_MISSING_LAYER", "1")
+
+    app = cdk.App()
+    stack = cdk.Stack(app, "LayerAllowed")
+    assert helpers.runtime_layer(stack, "MissingLayer") is None
+
+
+def test_built_layer_is_returned(monkeypatch, tmp_path):
+    """Layer présent -> un LayerVersion réel est rendu et rattaché."""
+    import stacks._helpers as helpers
+
+    (tmp_path / "python").mkdir(parents=True)
+    monkeypatch.setattr(helpers, "LAMBDA_LAYER_DIR", tmp_path)
+    monkeypatch.delenv("REMPART_ALLOW_MISSING_LAYER", raising=False)
+
+    app = cdk.App()
+    stack = cdk.Stack(app, "LayerPresent")
+    layer = helpers.runtime_layer(stack, "PresentLayer")
+    assert layer is not None
+    template = assertions.Template.from_stack(stack)
+    template.resource_count_is("AWS::Lambda::LayerVersion", 1)

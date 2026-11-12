@@ -30,7 +30,7 @@ TABLE_SPECS: list[tuple[str, str, str, list[tuple[str, str, str | None]]]] = [
     ("DecisionsTable", "decisions", "decision_id", [("finding_id-index", "finding_id", None)]),
     ("ReportsTable", "reports", "report_id", [("tenant_id-index", "tenant_id", None)]),
     ("BudgetTable", "budget", "pk", []),
-    ("AuditTable", "audit", "audit_id", []),
+    ("AuditTable", "audit", "audit_id", [("object_id-index", "object_id", None)]),
 ]
 
 

@@ -4,6 +4,8 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
+from boto3.dynamodb.conditions import Key
+
 from .models import (
     Application,
     AuditEvent,
@@ -120,6 +122,28 @@ class Store:
         """Sérialise une entité pour DynamoDB, avec son attribut TTL."""
         return _with_ttl(entity, self._retention_months)
 
+    def _query_gsi(
+        self,
+        table: str,
+        index: str,
+        pk: str,
+        pk_value: Any,
+        sk: str | None = None,
+        sk_value: Any = None,
+    ) -> list[dict[str, Any]]:
+        """Query a GSI by its (partition, optional sort) key and return raw items.
+
+        Against real DynamoDB the key condition already narrows the read. The
+        in-memory ``FakeDdbTable`` ignores the index and returns the whole
+        table, so callers must keep their client-side filter afterwards: it is
+        the authoritative filter and doubles as a no-op safety net in prod.
+        """
+        cond = Key(pk).eq(pk_value)
+        if sk is not None:
+            cond = cond & Key(sk).eq(sk_value)
+        res = self._table(table).query(IndexName=index, KeyConditionExpression=cond)
+        return res.get("Items", [])
+
     def save_tenant(self, t: Tenant) -> Tenant:
         self._table("tenants").put_item(Item=self._item(t))
         return t
@@ -143,10 +167,11 @@ class Store:
         return Application.from_item(_from_ddb(item)) if item else None
 
     def list_applications(self, tenant_id: str | None = None) -> list[Application]:
-        res = self._table("applications").scan()
-        items = res.get("Items", [])
         if tenant_id:
+            items = self._query_gsi("applications", "tenant_id-index", "tenant_id", tenant_id)
             items = [it for it in items if it.get("tenant_id") == tenant_id]
+        else:
+            items = self._table("applications").scan().get("Items", [])
         return [Application.from_item(_from_ddb(it)) for it in items]
 
     def save_config(self, c: TestConfig) -> TestConfig:
@@ -154,8 +179,8 @@ class Store:
         return c
 
     def list_configs(self, app_id: str) -> list[TestConfig]:
-        res = self._table("test-configs").scan()
-        items = [it for it in res.get("Items", []) if it.get("app_id") == app_id]
+        items = self._query_gsi("test-configs", "app_id-index", "app_id", app_id)
+        items = [it for it in items if it.get("app_id") == app_id]
         return [TestConfig.from_item(_from_ddb(it)) for it in items]
 
     def save_run(self, r: Run) -> Run:
@@ -174,12 +199,16 @@ class Store:
         status: str | None = None,
         limit: int = 50,
     ) -> list[Run]:
-        res = self._table("runs").scan()
-        items = res.get("Items", [])
-        if app_id:
-            items = [it for it in items if it.get("app_id") == app_id]
+        if tenant_id:
+            items = self._query_gsi("runs", "tenant_id-index", "tenant_id", tenant_id)
+        elif app_id:
+            items = self._query_gsi("runs", "app_id-index", "app_id", app_id)
+        else:
+            items = self._table("runs").scan().get("Items", [])
         if tenant_id:
             items = [it for it in items if it.get("tenant_id") == tenant_id]
+        if app_id:
+            items = [it for it in items if it.get("app_id") == app_id]
         if status:
             items = [it for it in items if it.get("status") == status]
         return [Run.from_item(_from_ddb(it)) for it in items[:limit]]
@@ -201,8 +230,12 @@ class Store:
         priority: str | None = None,
         limit: int = 100,
     ) -> list[Finding]:
-        res = self._table("findings").scan()
-        items = res.get("Items", [])
+        if tenant_id:
+            items = self._query_gsi("findings", "tenant_id-index", "tenant_id", tenant_id)
+        elif app_id:
+            items = self._query_gsi("findings", "app_id-fingerprint-index", "app_id", app_id)
+        else:
+            items = self._table("findings").scan().get("Items", [])
         if tenant_id:
             items = [it for it in items if it.get("tenant_id") == tenant_id]
         if app_id:
@@ -214,8 +247,15 @@ class Store:
         return [Finding.from_item(_from_ddb(it)) for it in items[:limit]]
 
     def find_by_fingerprint(self, app_id: str, fingerprint: str) -> Finding | None:
-        res = self._table("findings").scan()
-        for it in res.get("Items", []):
+        items = self._query_gsi(
+            "findings",
+            "app_id-fingerprint-index",
+            "app_id",
+            app_id,
+            "fingerprint",
+            fingerprint,
+        )
+        for it in items:
             if it.get("app_id") == app_id and it.get("fingerprint") == fingerprint:
                 return Finding.from_item(_from_ddb(it))
         return None
@@ -225,8 +265,8 @@ class Store:
         return d
 
     def list_decisions(self, finding_id: str) -> list[Decision]:
-        res = self._table("decisions").scan()
-        items = [it for it in res.get("Items", []) if it.get("finding_id") == finding_id]
+        items = self._query_gsi("decisions", "finding_id-index", "finding_id", finding_id)
+        items = [it for it in items if it.get("finding_id") == finding_id]
         return [Decision.from_item(_from_ddb(it)) for it in items]
 
     def save_report(self, r: Report) -> Report:
@@ -239,8 +279,8 @@ class Store:
         return Report.from_item(_from_ddb(item)) if item else None
 
     def list_reports(self, tenant_id: str) -> list[Report]:
-        res = self._table("reports").scan()
-        items = [it for it in res.get("Items", []) if it.get("tenant_id") == tenant_id]
+        items = self._query_gsi("reports", "tenant_id-index", "tenant_id", tenant_id)
+        items = [it for it in items if it.get("tenant_id") == tenant_id]
         return [Report.from_item(_from_ddb(it)) for it in items]
 
     def get_budget(self, tenant_id: str, month: str) -> BudgetState:
@@ -307,8 +347,10 @@ class Store:
         until: str | None = None,
         limit: int = 100,
     ) -> list[AuditEvent]:
-        res = self._table("audit").scan()
-        items = res.get("Items", [])
+        if object_id:
+            items = self._query_gsi("audit", "object_id-index", "object_id", object_id)
+        else:
+            items = self._table("audit").scan().get("Items", [])
         if object_type:
             items = [it for it in items if it.get("object_type") == object_type]
         if object_id:

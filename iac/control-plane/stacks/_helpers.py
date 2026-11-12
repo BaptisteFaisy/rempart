@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -45,17 +46,37 @@ def create_kms_key(scope: Construct, id_: str, alias: str) -> kms.Key:
 
 
 def runtime_layer(scope: Construct, id_: str) -> _lambda.ILayerVersion | None:
-    """Layer des dépendances tierces, ou ``None`` s'il n'a pas été construit.
+    """Layer des dépendances tierces — **fail fast** s'il n'est pas construit.
 
     Construit par ``scripts/build_lambda_layer.sh`` : il pose
     ``iac/control-plane/lambda-layer/python/`` avec les paquets installés pour
-    ``manylinux2014_x86_64`` / CPython 3.12. Tant que le dossier n'existe pas,
-    on renvoie ``None`` plutôt que de faire échouer le synth : les Lambdas qui
-    n'ont pas besoin de dépendance tierce restent déployables.
+    ``manylinux2014_x86_64`` / CPython 3.12.
+
+    INCIDENT RÉEL (11 nov 2026, compte 710332178565) : cette fonction rendait
+    ``None`` silencieusement quand le dossier était absent. Le ``cdk deploy`` a
+    donc créé 11 Lambdas avec ``layers=[]``, et la première invocation a échoué
+    en ``Runtime.ImportModuleError: No module named 'requests'`` (et ``fpdf``
+    pour l'API). Le synth passait, le déploiement réussissait, et TOUTES les
+    fonctions étaient mortes — exactement le même angle mort que le placeholder
+    inline corrigé ailleurs. On lève donc une erreur explicite.
+
+    Échappatoire pour la synthèse sans déploiement (tests, ``cdk synth``,
+    revue de template) : ``REMPART_ALLOW_MISSING_LAYER=1``. Cette variable ne
+    doit JAMAIS être posée pour un vrai déploiement.
     """
     python_dir = LAMBDA_LAYER_DIR / "python"
     if not python_dir.is_dir():
-        return None
+        if os.environ.get("REMPART_ALLOW_MISSING_LAYER") == "1":
+            return None
+        raise RuntimeError(
+            "Layer des dépendances Lambda absent : "
+            f"{LAMBDA_LAYER_DIR}/python introuvable.\n"
+            "Sans lui, les Lambdas se déploient mais échouent à l'invocation "
+            "(ImportModuleError sur requests / fpdf / strands).\n"
+            "Construis-le d'abord :  ./scripts/build_lambda_layer.sh\n"
+            "Pour synthétiser sans déployer (tests, cdk synth) : "
+            "REMPART_ALLOW_MISSING_LAYER=1"
+        )
     return _lambda.LayerVersion(
         scope,
         id_,
