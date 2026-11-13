@@ -41,6 +41,13 @@ DEFAULT_BASE_URL = "https://api.inferhub.dev/v1"
 #: fournisseurs sont hors budget de l'utilisateur (HTTP 402 « no_provider_under_bid »).
 DEFAULT_MODELS = ("combo/cheap", "ali/glm-5.2")
 
+#: Nom du paramètre SSM SecureString qui porte la clé (jamais la valeur).
+SSM_PARAM_ENV = "REMPART_LLM_API_KEY_SSM_PARAM"
+
+#: Une seule lecture SSM par conteneur Lambda : le secret ne change pas, et
+#: chaque appel coûterait une requête réseau au milieu du triage.
+_SSM_CACHE: dict[str, str | None] = {}
+
 
 class _FallbackModel(Model):
     """Modèle Strands qui essaie plusieurs modèles OpenAI-compatibles.
@@ -93,10 +100,48 @@ class _FallbackModel(Model):
 
 def llm_configured() -> bool:
     """Vrai si un endpoint et une clé sont disponibles."""
-    return bool(
-        (os.environ.get("REMPART_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL"))
-        and (os.environ.get("REMPART_LLM_API_KEY") or os.environ.get("LLM_API_KEY"))
-    )
+    return bool(base_url() and api_key())
+
+
+def base_url() -> str | None:
+    """Endpoint compatible OpenAI du modèle (public, jamais un secret)."""
+    return os.environ.get("REMPART_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL")
+
+
+def api_key() -> str | None:
+    """Clé du modèle : environnement d'abord, puis paramètre SSM si configuré."""
+    direct = os.environ.get("REMPART_LLM_API_KEY") or os.environ.get("LLM_API_KEY")
+    if direct:
+        return direct
+    name = os.environ.get(SSM_PARAM_ENV)
+    return api_key_from_ssm(name) if name else None
+
+
+def api_key_from_ssm(name: str) -> str | None:
+    """Valeur déchiffrée d'un paramètre SecureString, ou ``None`` (jamais d'exception).
+
+    Pourquoi ce détour : CloudFormation **refuse** la référence dynamique
+    ``resolve:ssm-secure`` dans ``AWS::Lambda::Function/Properties/Environment/
+    Variables`` — mesuré le 13/11/2026, le changeset échoue avec « SSM Secure
+    reference is not supported in ». Le vrai modèle n'aurait donc jamais pu
+    être déployé. La Lambda lit le paramètre elle-même, une fois par conteneur.
+    """
+    if name in _SSM_CACHE:
+        return _SSM_CACHE[name]
+    try:
+        client = _ssm_client()
+        value = client.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
+    except Exception:  # noqa: BLE001 — une clé absente ne doit pas casser le triage
+        value = None
+    _SSM_CACHE[name] = value or None
+    return _SSM_CACHE[name]
+
+
+def _ssm_client() -> Any:
+    """Client SSM du compte courant — point d'injection pour les tests."""
+    import boto3
+
+    return boto3.client("ssm")
 
 
 def model_ids() -> tuple[str, ...]:
@@ -122,8 +167,10 @@ def build_model_client(model_client: Any = None) -> Any:
         return model_client
     if not llm_configured():
         return None
-    base_url = os.environ.get("REMPART_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL")
-    api_key = os.environ.get("REMPART_LLM_API_KEY") or os.environ.get("LLM_API_KEY")
+    base = base_url()
+    key = api_key()
+    if not base or not key:
+        return None
     try:
         from strands.models.openai import OpenAIModel
     except ImportError:  # pragma: no cover - dépendance optionnelle
@@ -133,7 +180,7 @@ def build_model_client(model_client: Any = None) -> Any:
         try:
             models.append(
                 OpenAIModel(
-                    client_args={"base_url": base_url, "api_key": api_key},
+                    client_args={"base_url": base, "api_key": key},
                     model_id=model_id,
                 )
             )
@@ -149,6 +196,10 @@ def build_model_client(model_client: Any = None) -> Any:
 __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_MODELS",
+    "SSM_PARAM_ENV",
+    "api_key",
+    "api_key_from_ssm",
+    "base_url",
     "build_model_client",
     "llm_configured",
     "model_ids",
