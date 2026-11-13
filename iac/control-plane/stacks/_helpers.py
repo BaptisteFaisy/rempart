@@ -24,12 +24,33 @@ BACKEND_DIR = REPO_ROOT / "backend"
 # par scripts/build_lambda_layer.sh (dossier iac/control-plane/lambda-layer/).
 LAMBDA_LAYER_DIR = IAC_DIR / "lambda-layer"
 # Ni les tests, ni les caches, ni les artefacts locaux ne partent dans l'asset.
+#
+# MESURE du 13/11/2026 (poste de dev, venv posé dans backend/ par erreur) :
+# chaque synthèse copiait 655 Mo de `.venv` dans un dossier temporaire, 111
+# dossiers `cdk.out*` = **59 Go** laissés dans /tmp, disque à 100 %, suite de
+# tests en ENOSPC. Un environnement virtuel n'est jamais du code déployé : il
+# est exclu ici, et `tests/iac/test_asset_hygiene.py` le vérifie sur l'asset
+# réel (pas seulement sur cette constante).
 LAMBDA_ASSET_EXCLUDES = [
+    # Le dossier ET son contenu : une exclusion `x/**` seule laisse passer les
+    # fichiers cachés d'un dossier (`ignore` de CDK), donc on nomme les deux.
+    "tests",
     "tests/**",
+    "**/__pycache__",
     "**/__pycache__/**",
     "**/*.pyc",
+    ".pytest_cache",
     ".pytest_cache/**",
+    ".ruff_cache",
     ".ruff_cache/**",
+    ".mypy_cache",
+    ".mypy_cache/**",
+    ".venv",
+    ".venv/**",
+    "**/.venv",
+    "**/.venv/**",
+    ".git",
+    ".git/**",
     "pyproject.toml",
 ]
 
