@@ -192,6 +192,46 @@ def test_run_triage_with_fake_model_client_uses_fallback_and_guardrails() -> Non
     assert proposals[0].priority == "P1"
 
 
+def test_le_repli_deterministe_est_journalise(caplog) -> None:
+    """Un modèle qui tombe ne doit pas disparaître en silence.
+
+    Mesuré le 13/11/2026 en production : la Lambda de triage rendait
+    « triage-agent:deterministic » sans aucune trace de la cause. Ce test
+    verrouille la trace (niveau WARNING, type de l'exception).
+    """
+    app = _app()
+    f = _finding("f-1", severity="Critical", confidence="High")
+
+    class _BrokenModel(Model):
+        """Un vrai modèle Strands qui tombe : l'agent doit replier ET le dire."""
+
+        def update_config(self, **kwargs: Any) -> None:
+            pass
+
+        def get_config(self) -> Any:
+            return {}
+
+        async def structured_output(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError
+
+        async def stream(self, *args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("fournisseur indisponible")
+
+    with caplog.at_level("WARNING", logger="rempart.triage.agent"):
+        proposals = run_triage(
+            findings=[f],
+            app=app,
+            known_findings=[],
+            past_decisions=[],
+            model_client=_BrokenModel(),
+        )
+
+    assert len(proposals) == 1
+    assert proposals[0].source == "deterministic"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("modèle indisponible" in message for message in messages), messages
+
+
 def test_run_triage_with_strands_model_applies_guardrails() -> None:
     """Strands Agent path runs tools and enforces guardrails (priority + ENF-IA-02)."""
     app = _app()
