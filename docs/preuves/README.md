@@ -1,23 +1,35 @@
 # Preuves rejouables des correctifs
 
-Ce dossier contient la **fiche de preuves** du 12/11/2026
-([`2026-11-12-corrections.md`](2026-11-12-corrections.md)) : pour chaque défaut
-corrigé, le symptôme mesuré *avant*, le commit du correctif, et la preuve
-*après* — avec la valeur observée et la commande qui la produit.
+Ce dossier contient les **fiches de preuves** :
+
+- [`2026-11-12-corrections.md`](2026-11-12-corrections.md) — les 10 défauts du
+  12/11/2026 (contrat de l'API,Seconds clés, CORS, portail) ;
+- [`2026-11-13-session-llm-production.md`](2026-11-13-session-llm-production.md) —
+  le 13/11/2026 : le **vrai modèle** (InferHub) rendu effectif en production, et
+  5 défauts trouvés en route (asset/synthèse, dépendances, clé SSM, repli
+  muet, métadonnées du layer).
+
+Pour chaque défaut : le symptôme mesuré *avant*, le commit du correctif, et la
+preuve *après* — avec la valeur observée et la commande qui la produit.
 
 ## Rejouer les preuves
 
 ```bash
-# 1. un jeton Cognito (les preuves P2/P2b/P4 en ont besoin)
-aws cognito-idp initiate-auth --auth-flow USER_PASSWORD_AUTH \
-  --client-id 7qr971kfs2jlj5i2d065mb1fbl \
-  --auth-parameters USERNAME="<utilisateur>",PASSWORD="<mot de passe>"
+# 1. un jeton Cognito (les preuves P2/P2b/P4 en ont besoin).
+#    Le script crée un utilisateur de banc, le retire du groupe et le supprime.
+export REMPART_TOKEN="$(python3 scripts/aws_bench_user.py --create --token-only)"
 
 # 2. les preuves
-REMPART_TOKEN="$(aws cognito-idp initiate-auth ... | jq -r .AuthenticationResult.IdToken)" \
-REMPART_DEPLOY_SINCE="2026-11-12T14:30:00+00:00" \
-  python3 scripts/proof_real.py
+REMPART_DEPLOY_SINCE="2026-11-12T14:30:00+00:00" python3 scripts/proof_real.py
+
+# 3. toujours nettoyer
+python3 scripts/aws_bench_user.py --delete
 ```
+
+Deux pièges mesurés le 13/11/2026, corrigés dans le script : le pool exige un
+identifiant **au format e-mail**, et l'auteurisateur JWT d'API Gateway attend le
+jeton d'**accès** (`AccessToken`), pas l'`IdToken` (dont l'audience est le
+pool, pas l'application).
 
 - code de sortie **0** = toutes les preuves tiennent ; **1** = au moins une
   preuve ne tient plus (le détail est affiché, puis listé en fin de sortie) ;
