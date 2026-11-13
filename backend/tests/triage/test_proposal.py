@@ -81,3 +81,43 @@ def test_triage_proposal_from_snake_case() -> None:
     assert p.finding_id == "f-2"
     assert p.proposed_status == "LIKELY_FALSE_POSITIVE"
     assert p.priority == "P4"
+
+
+def test_les_booleens_ecrits_en_chaine_sont_lus_correctement() -> None:
+    """Un modèle écrit « false » en chaîne : `bool("false")` vaut True en Python.
+
+    Mesuré le 13/11/2026 en production : la décision du modèle portait
+    `isRegression: true` alors qu'il affirmait `false`, et `duplicateOf` valait
+    la chaîne « false ». La régression était donc **inventée**, et un doublon
+    était pointé vers une chaîne au lieu de rien.
+    """
+    p = TriageProposal.from_dict(
+        {
+            "findingId": "f-1",
+            "duplicateOf": "false",
+            "isRegression": "false",
+            "proposedStatus": "TO_VERIFY",
+            "needsHumanValidation": "true",
+        }
+    )
+    assert p.is_regression is False
+    assert p.duplicate_of is None
+    assert p.needs_human_validation is True
+
+
+def test_les_references_imbriquees_sont_aplaties() -> None:
+    """Le modèle a imbriqué sa liste : on garde les références, pas la liste."""
+    p = TriageProposal.from_dict(
+        {
+            "findingId": "f-1",
+            "references": [["CWE-639", "OWASP API1:2023"], "CWE-639", "  "],
+        }
+    )
+    assert p.references == ["CWE-639", "OWASP API1:2023"]
+
+
+def test_les_valeurs_absentes_restent_absentes() -> None:
+    p = TriageProposal.from_dict({"findingId": "f-1", "references": None})
+    assert p.references == []
+    assert p.duplicate_of is None
+    assert p.is_regression is False
