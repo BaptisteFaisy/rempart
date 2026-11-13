@@ -153,11 +153,43 @@ def _refuse_budget(
     return {**refused, "budget_pct": verdict.pct}
 
 
+def _tenant_of_app(payload: dict[str, Any], deps: Deps) -> str:
+    """Le tenant d'une application — la seule source de vérité quand le
+    payload ne le porte pas (machine d'états, cron mensuel)."""
+    app_id = str(payload.get("app_id") or "").strip()
+    if not app_id:
+        return ""
+    app = _app_of(deps, app_id)
+    return str(app.tenant_id) if app is not None else ""
+
+
 def budget_gate(
     payload: dict[str, Any], deps: Deps, now: datetime | None = None
 ) -> dict[str, Any]:
-    """Refuse to start a test without a valid mandate or with an exhausted budget."""
-    tenant_id = payload["tenant_id"]
+    """Refuse to start a test without a valid mandate or with an exhausted budget.
+
+    Le tenant est résolu par ``payload["tenant_id"]`` **ou** par
+    ``payload["app_id"]`` (l'application connaît son tenant).
+
+    INCIDENT RÉEL (13 nov 2026) : la machine d'états `RempartPentestLifecycle`
+    reçoit `{app_id, pentest_id, …}` — jamais `tenant_id`. `payload["tenant_id"]`
+    levait donc `KeyError`, la machine échouait sur « Invalid path '$.allowed' »,
+    et **aucun test n'a jamais pu partir** — pas même le cron mensuel, dont le
+    payload ne porte que `{"trigger": "schedule"}`. La résolution par
+    l'application rend le garde-fou utilisable par tous les chemins.
+    """
+    tenant_id = str(payload.get("tenant_id") or "").strip()
+    if not tenant_id:
+        tenant_id = _tenant_of_app(payload, deps)
+    if not tenant_id:
+        return {
+            **payload,
+            "allowed": False,
+            "reason": "unknown_tenant",
+        }
+    # Le tenant résolu rejoint le payload : les tâches suivantes (start_run,
+    # poll_run) en ont besoin pour écrire le Run.
+    payload = {**payload, "tenant_id": tenant_id}
 
     # Coupe-circuit global : évalué en tout premier, avant même la résolution
     # du tenant — quand il est levé, rien ne part, quel que soit le contexte.
