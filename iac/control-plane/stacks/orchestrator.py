@@ -49,6 +49,9 @@ TASK_NAMES = (
     "discover_runs",
 )
 
+#: Variable qui porte le NOM du paramètre SSM de la clé du modèle (jamais la valeur).
+LLM_KEY_PARAM_ENV = "REMPART_LLM_API_KEY_SSM_PARAM"
+
 POLL_INTERVAL_SECONDS = 60
 # 240 x 60 s = 4 h of polling (ENF-PERF-01, cahier des charges 11.4).
 MAX_POLL_ITERATIONS = 240
@@ -98,6 +101,7 @@ class OrchestratorStack(cdk.Stack):
         self.lambdas: dict[str, _lambda.Function] = {
             name: self._create_task_lambda(name, common_env, tables) for name in TASK_NAMES
         }
+        self._grant_llm_key_read()
         # Alias explicite : la decouverte est planifiee toutes les 5 min.
         self.discovery_lambda = self.lambdas["discover_runs"]
         # EF-COR-06 : balayeur des echeances, planifie toutes les heures.
@@ -125,10 +129,10 @@ class OrchestratorStack(cdk.Stack):
         """Variables du modèle de triage (EF-TRI-01).
 
         L'endpoint et la liste de modèles sont publics ; la **clé** vient d'un
-        paramètre SSM SecureString, par référence dynamique CloudFormation :
-        elle n'apparaît jamais dans le template. Sans paramètre fourni, aucune
-        clé n'est posée et le triage garde son repli déterministe — la démo
-        reste donc gratuite.
+        paramètre SSM SecureString lu par la Lambda (`rempart.triage.llm`), donc
+        elle n'apparaît jamais dans le template ni dans la configuration de la
+        fonction. Sans paramètre fourni, aucune clé n'est lue et le triage
+        garde son repli déterministe — la démo reste donc gratuite.
         """
         env = {
             "REMPART_LLM_BASE_URL": os.environ.get(
@@ -138,13 +142,46 @@ class OrchestratorStack(cdk.Stack):
                 "REMPART_LLM_MODELS", "combo/cheap,ali/glm-5.2"
             ),
         }
-        parameter = os.environ.get("REMPART_LLM_API_KEY_SSM_PARAM")
+        parameter = os.environ.get(LLM_KEY_PARAM_ENV)
         if parameter:
-            reference = cdk.CfnDynamicReference(
-                cdk.CfnDynamicReferenceService.SSM_SECURE, parameter
-            )
-            env["REMPART_LLM_API_KEY"] = reference.to_string()
+            # CloudFormation REFUSE `resolve:ssm-secure` dans les variables
+            # d'environnement d'une Lambda — mesuré le 13/11/2026 :
+            # « SSM Secure reference is not supported in
+            # [AWS::Lambda::Function/Properties/Environment/Variables/...] »,
+            # changeset en échec. Autrement dit le vrai modèle ne pouvait
+            # jamais être déployé ainsi. On transmet donc le NOM du paramètre :
+            # la Lambda lit le SecureString elle-même au premier triage et
+            # garde la valeur en mémoire. Le secret n'apparaît ni dans le
+            # template ni dans la configuration de la fonction.
+            env[LLM_KEY_PARAM_ENV] = parameter
         return env
+
+    def _grant_llm_key_read(self) -> None:
+        """Droit de lire la clé du modèle, au seul Lambda qui trie.
+
+        `ssm:GetParameter` sur ce paramètre précis, et `kms:Decrypt` limité au
+        service SSM (une SecureString est chiffrée par `alias/aws/ssm`).
+        """
+        parameter = os.environ.get(LLM_KEY_PARAM_ENV)
+        triage = self.lambdas.get("dispatch_triage")
+        if not parameter or triage is None:
+            return
+        name = parameter if parameter.startswith("/") else f"/{parameter}"
+        triage.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["ssm:GetParameter"],
+                resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter{name}"],
+            )
+        )
+        triage.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["kms:Decrypt"],
+                resources=["*"],
+                conditions={
+                    "StringEquals": {"kms:ViaService": f"ssm.{self.region}.amazonaws.com"}
+                },
+            )
+        )
 
     def _create_task_lambda(
         self,

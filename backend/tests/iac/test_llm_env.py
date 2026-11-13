@@ -3,6 +3,14 @@
 Le triage se joue dans l'orchestrateur, pas dans l'API. Sans ces variables,
 les Lambdas n'auraient aucun endpoint LLM et retomberaient sur le règleur —
 c'est-à-dire que le « vrai modèle » ne serait jamais utilisé en production.
+
+Défaut corrigé le 13/11/2026 : la clé était posée en **référence dynamique**
+`resolve:ssm-secure` dans `Environment.Variables`. CloudFormation refuse cette
+forme (« SSM Secure reference is not supported in [AWS::Lambda::Function/
+Properties/Environment/Variables/…] »), le changeset échoue, et donc **le vrai
+modèle n'a jamais pu être déployé**. Le test qui verrouillait cette référence
+prouvait un template impossible à déployer. La Lambda lit désormais le
+SecureString elle-même, au premier triage.
 """
 
 from __future__ import annotations
@@ -11,6 +19,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 from aws_cdk import assertions
 
 IAC_DIR = Path(__file__).resolve().parents[3] / "iac" / "control-plane"
@@ -19,11 +28,22 @@ if str(IAC_DIR) not in sys.path:
 
 from app import build_app  # noqa: E402
 
+PARAM_ENV = "REMPART_LLM_API_KEY_SSM_PARAM"
 
-def _orchestrator_env() -> list[dict[str, str]]:
+
+@pytest.fixture(scope="module")
+def template() -> assertions.Template:
+    """Synthèse unique pour les tests qui ne changent pas l'environnement.
+
+    Une synthèse par test coûterait plusieurs secondes dès que le layer existe
+    (136 Mo recopiés à chaque fois) : le budget CI est de 5 minutes.
+    """
     app = build_app()
     app.synth()
-    template = assertions.Template.from_stack(app.node.find_child("RempartOrchestratorStack"))
+    return assertions.Template.from_stack(app.node.find_child("RempartOrchestratorStack"))
+
+
+def _envs(template: assertions.Template) -> list[dict[str, str]]:
     functions = template.find_resources("AWS::Lambda::Function")
     return [
         props["Properties"]["Environment"]["Variables"]
@@ -31,26 +51,79 @@ def _orchestrator_env() -> list[dict[str, str]]:
     ]
 
 
-def test_les_lambdas_du_triage_portent_l_endpoint_du_modele():
-    for env in _orchestrator_env():
+def _actions(statement: dict) -> list[str]:
+    raw = statement.get("Action", [])
+    return [raw] if isinstance(raw, str) else list(raw)
+
+
+def _llm_key_statements(template: assertions.Template) -> list[dict]:
+    """Instructions IAM qui donnent le droit de lire la clé du modèle."""
+    statements = []
+    for policy in template.find_resources("AWS::IAM::Policy").values():
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]:
+            if "ssm:GetParameter" in _actions(statement):
+                statements.append(statement)
+    return statements
+
+
+def test_les_lambdas_du_triage_portent_l_endpoint_du_modele(template):
+    for env in _envs(template):
         assert env.get("REMPART_LLM_BASE_URL", "").startswith("https://")
 
 
-def test_la_cle_du_modele_vient_de_ssm_et_jamais_en_clair(monkeypatch):
-    monkeypatch.setenv("REMPART_LLM_API_KEY_SSM_PARAM", "/rempart/dev/llm-key")
+def test_aucune_reference_dynamique_dans_les_variables_d_environnement(template):
+    """Garde de classe : CFN rejette `resolve:` dans les variables d'une Lambda.
+
+    Ce test attrape le défaut au synth, pas au déploiement : il a coûté un
+    changeset en échec et un « le LLM est câblé » qui n'a jamais tourné.
+    """
+    for env in _envs(template):
+        rendered = json.dumps(env)
+        assert "{{resolve:" not in rendered, (
+            f"référence dynamique dans les variables d'environnement : {rendered}"
+        )
+
+
+def test_sans_parametre_ssm_aucune_cle_n_est_passee(template, monkeypatch):
+    monkeypatch.delenv(PARAM_ENV, raising=False)
+    for env in _envs(template):
+        assert "REMPART_LLM_API_KEY" not in env
+        assert PARAM_ENV not in env
+
+
+def test_le_parametre_ssm_est_passe_par_nom_jamais_par_valeur(monkeypatch):
+    monkeypatch.setenv(PARAM_ENV, "/rempart/dev/llm-key")
     app = build_app()
     app.synth()
-    template = assertions.Template.from_stack(app.node.find_child("RempartOrchestratorStack"))
-    functions = template.find_resources("AWS::Lambda::Function")
-    env = next(iter(functions.values()))["Properties"]["Environment"]["Variables"]
-    assert "REMPART_LLM_API_KEY" in env
-    rendered = json.dumps(env["REMPART_LLM_API_KEY"])
-    assert "resolve:ssm-secure:/rempart/dev/llm-key" in rendered
-    # La valeur ne doit jamais apparaître : seulement la référence dynamique.
-    assert "sk-" not in rendered.lower()
-
-
-def test_sans_parametre_ssm_la_cle_est_absente_et_le_repli_reste_possible(monkeypatch):
-    monkeypatch.delenv("REMPART_LLM_API_KEY_SSM_PARAM", raising=False)
-    for env in _orchestrator_env():
+    envs = _envs(assertions.Template.from_stack(app.node.find_child("RempartOrchestratorStack")))
+    assert envs, "aucune Lambda orchestrateur synthétisée"
+    for env in envs:
+        assert env.get(PARAM_ENV) == "/rempart/dev/llm-key"
+        # La valeur n'est jamais matérialisée : ni en clair, ni en référence.
         assert "REMPART_LLM_API_KEY" not in env
+        assert "resolve:" not in json.dumps(env)
+
+
+def test_un_seul_lambda_recoit_le_droit_de_lire_la_cle(monkeypatch):
+    """Le droit de lire la clé ne doit pas être donné aux dix fonctions."""
+    monkeypatch.setenv(PARAM_ENV, "/rempart/dev/llm-key")
+    app = build_app()
+    app.synth()
+    built = assertions.Template.from_stack(app.node.find_child("RempartOrchestratorStack"))
+    statements = _llm_key_statements(built)
+
+    assert len(statements) == 1, f"{len(statements)} fonctions peuvent lire la clé"
+    statement = statements[0]
+    resources = statement.get("Resource", [])
+    resources = [resources] if isinstance(resources, str) else resources
+    assert any("/rempart/dev/llm-key" in str(r) for r in resources), resources
+    # SecureString : il faut aussi le déchiffrement, limité au service SSM.
+    kms = [
+        s
+        for policy in built.find_resources("AWS::IAM::Policy").values()
+        for s in policy["Properties"]["PolicyDocument"]["Statement"]
+        if "kms:Decrypt" in _actions(s)
+    ]
+    assert kms, "aucun kms:Decrypt : la SecureString ne pourra pas être lue"
+    condition = json.dumps(kms[0].get("Condition", {}))
+    assert "ssm." in condition and "ViaService" in condition, condition
