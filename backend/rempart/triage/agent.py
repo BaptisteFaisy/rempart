@@ -1,5 +1,8 @@
 """Triage agent orchestration (Strands / AgentCore with deterministic fallback)."""
 
+from __future__ import annotations
+
+import logging
 from typing import Any
 
 from rempart.common.models import Application, Decision, Finding
@@ -17,6 +20,8 @@ from .tools import (
     search_known_findings,
     submit_triage_proposal,
 )
+
+LOGGER = logging.getLogger("rempart.triage.agent")
 
 
 def _strands_available() -> bool:
@@ -246,7 +251,11 @@ def _raw_proposals(
             return cached
         try:
             raw_proposals = _run_strands_agent(ctx, model_client)
-        except Exception:  # noqa: BLE001 — un modèle saturé ne doit pas casser le lot
+        except Exception as exc:  # noqa: BLE001 — un modèle saturé ne doit pas casser le lot
+            LOGGER.warning(
+                "triage : modèle indisponible (%s: %s) — repli déterministe",
+                type(exc).__name__, exc,
+            )
             return _deterministic_triage(
                 findings, app, known_findings, past_decisions, store=store
             )
@@ -254,6 +263,7 @@ def _raw_proposals(
             proposal.source = "model"
         verdict_cache.put_batch(fingerprints, raw_proposals)
         return raw_proposals
+    LOGGER.info("triage : aucun modèle réel disponible — règleur déterministe")
     return _deterministic_triage(
         findings, app, known_findings, past_decisions, store=store
     )

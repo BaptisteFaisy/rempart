@@ -28,10 +28,13 @@ passer une faute critique en P4.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from strands.models import Model
+
+LOGGER = logging.getLogger("rempart.triage.llm")
 
 DEFAULT_BASE_URL = "https://api.inferhub.dev/v1"
 #: Modèles essayés dans l'ordre. Le routeur d'InferHub bascule ses fournisseurs
@@ -131,7 +134,8 @@ def api_key_from_ssm(name: str) -> str | None:
     try:
         client = _ssm_client()
         value = client.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
-    except Exception:  # noqa: BLE001 — une clé absente ne doit pas casser le triage
+    except Exception as exc:  # noqa: BLE001 — une clé absente ne doit pas casser le triage
+        LOGGER.warning("lecture SSM de %s impossible : %s", name, type(exc).__name__)
         value = None
     _SSM_CACHE[name] = value or None
     return _SSM_CACHE[name]
@@ -173,7 +177,8 @@ def build_model_client(model_client: Any = None) -> Any:
         return None
     try:
         from strands.models.openai import OpenAIModel
-    except ImportError:  # pragma: no cover - dépendance optionnelle
+    except ImportError as exc:  # pragma: no cover - dépendance optionnelle
+        LOGGER.warning("client du modèle indisponible (openai/strands) : %s", exc)
         return None
     models = []
     for model_id in model_ids():
@@ -187,6 +192,7 @@ def build_model_client(model_client: Any = None) -> Any:
         except Exception:  # pragma: no cover - configuration invalide
             continue
     if not models:
+        LOGGER.warning("aucun modèle constructible parmi %s", model_ids())
         return None
     if len(models) == 1:
         return models[0]
