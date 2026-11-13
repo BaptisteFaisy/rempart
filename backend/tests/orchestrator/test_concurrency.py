@@ -157,3 +157,25 @@ def test_every_blocking_status_is_counted(status):
     seed_two_tenants(store)
     store.save_run(_run("r-1", status))
     assert count_running(store, TENANT_A) == 1
+
+
+def test_budget_gate_resout_le_tenant_depuis_l_application():
+    """INCIDENT RÉEL (13 nov 2026) : la machine d'états ne porte pas `tenant_id`.
+
+    Le payload réel de `RempartPentestLifecycle` est `{app_id, pentest_id, …}` ;
+    `payload["tenant_id"]` levait `KeyError`, la machine échouait sur
+    « Invalid path '$.allowed' » et **aucun test n'a jamais pu partir** — pas
+    même le cron mensuel, dont le payload ne porte que `{"trigger": "schedule"}`.
+    """
+    deps = make_deps(seed_two_tenants())
+    out = budget_gate({"app_id": APP_A}, deps)
+    assert out["allowed"] is True
+    assert out["tenant_id"] == TENANT_A
+
+
+def test_budget_gate_refuse_proprement_sans_application_ni_tenant():
+    """Sans application ni tenant : refus motivé, pas une exception."""
+    deps = make_deps(seed_two_tenants())
+    out = budget_gate({"trigger": "schedule"}, deps)
+    assert out["allowed"] is False
+    assert out["reason"] == "unknown_tenant"
