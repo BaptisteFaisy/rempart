@@ -127,3 +127,29 @@ def test_un_seul_lambda_recoit_le_droit_de_lire_la_cle(monkeypatch):
     assert kms, "aucun kms:Decrypt : la SecureString ne pourra pas être lue"
     condition = json.dumps(kms[0].get("Condition", {}))
     assert "ssm." in condition and "ViaService" in condition, condition
+
+
+def test_les_droits_continuum_sont_dans_une_politique_managee_partagee():
+    """INCIDENT RÉEL (13 nov 2026) : les droits Continuum en `add_to_role_policy`
+    faisaient déborder la politique inline du rôle (limite AWS : 10 240
+    caractères). CDK la déplaçait alors dans une « OverflowPolicy » managed et
+    **les autres instructions de la même politique disparaissaient du
+    template** : les droits `ssm:GetParameter` de la clé du modèle ont été
+    perdus de la sorte, sans la moindre erreur.
+
+    Les droits Continuum doivent donc être une politique **gérée**, attachée
+    aux rôles — et les droits de la clé du modèle doivent rester lisibles
+    dans la politique inline du rôle qui trie.
+    """
+    app = build_app()
+    app.synth()
+    built = assertions.Template.from_stack(app.node.find_child("RempartOrchestratorStack"))
+
+    managed = built.find_resources("AWS::IAM::ManagedPolicy")
+    assert managed, "aucune politique gérée : les droits Continuum débordent l'inline"
+    sa_policies = [
+        policy
+        for policy in managed.values()
+        if "securityagent:StartPentestJob" in json.dumps(policy["Properties"])
+    ]
+    assert sa_policies, "les droits Continuum ne sont dans aucune politique gérée"

@@ -8,6 +8,7 @@ from typing import Any
 
 import aws_cdk as cdk
 import aws_cdk.aws_dynamodb as ddb
+import aws_cdk.aws_iam as iam
 import aws_cdk.aws_kms as kms
 import aws_cdk.aws_lambda as _lambda
 from constructs import Construct
@@ -53,6 +54,71 @@ LAMBDA_ASSET_EXCLUDES = [
     ".git/**",
     "pyproject.toml",
 ]
+
+
+#: Opérations d'AWS Security Agent (Continuum) réellement appelées par le code.
+#:
+#: INCIDENT RÉEL (13 nov 2026) : aucune de ces permissions n'était accordée aux
+#: Lambdas du plan de contrôle. Le premier test Continuum réel a échoué sur
+#: « AccessDeniedException … not authorized to perform:
+#: securityagent:StartPentestJob » : **le test ne pouvait pas démarrer**, quel
+#: que soit le chemin. Le rôle du compte client (`rempart-ops-role`) porte la
+#: même liste, pour le déploiement cross-account.
+SECURITYAGENT_ACTIONS = (
+    "securityagent:StartPentestJob",
+    "securityagent:StopPentestJob",
+    "securityagent:BatchGetPentestJobs",
+    "securityagent:ListFindings",
+    "securityagent:BatchGetFindings",
+    "securityagent:ListPentestJobsForPentest",
+    "securityagent:ListPentestJobTasks",
+    "securityagent:BatchGetPentestJobTasks",
+    "securityagent:ListAgentSpaces",
+    "securityagent:BatchGetAgentSpaces",
+    "securityagent:CreateAgentSpace",
+    "securityagent:CreateTargetDomain",
+    "securityagent:VerifyTargetDomain",
+    "securityagent:BatchGetTargetDomains",
+    "securityagent:ListTargetDomains",
+    "securityagent:CreatePentest",
+    "securityagent:UpdateFinding",
+    "securityagent:StartCodeRemediation",
+)
+
+
+def securityagent_policy(
+    scope: Construct, *, account: str, region: str, id_: str = "RempartSecurityAgentPolicy"
+) -> iam.IManagedPolicy:
+    """Politique gérée portant les droits Continuum, attachée aux rôles qui en ont besoin.
+
+    PIEGE CDK (mesuré le 13/11/2026) : ces droits ajoutés en `add_to_role_policy`
+    font déborder la politique inline du rôle (limite AWS : 10 240 caractères).
+    CDK la déplace alors dans une « OverflowPolicy » managed, et **les autres
+    instructions de la même politique disparaissent du template** — les droits
+    `ssm:GetParameter` de la clé du modèle ont été perdus de la sorte, sans
+    aucune erreur. Une politique gérée partagée évite le débordement : une
+    seule fois les droits, et les politiques inline restent sous la limite.
+
+    Les ressources sont celles du **propre** compte : le déploiement
+    cross-account passe par le rôle d'opérateur du client (`rempart-ops-role`),
+    assumé via `REMPART_SA_ROLE_ARN`.
+    """
+    return iam.ManagedPolicy(
+        scope,
+        id_,
+        statements=[
+            iam.PolicyStatement(
+                sid="RempartSecurityAgent",
+                actions=list(SECURITYAGENT_ACTIONS),
+                resources=[f"arn:aws:securityagent:{region}:{account}:*"],
+            )
+        ],
+    )
+
+
+def grant_securityagent(fn: _lambda.Function, policy: iam.IManagedPolicy) -> None:
+    """Attache la politique Continuum au rôle d'une Lambda."""
+    fn.role.add_managed_policy(policy)
 
 
 def create_kms_key(scope: Construct, id_: str, alias: str) -> kms.Key:

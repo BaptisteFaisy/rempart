@@ -45,6 +45,10 @@ class Settings:
     github_api: str = "https://api.github.com"
     github_owner: str = ""
     sa_endpoint_url: str | None = None
+    # Rôle d'opérateur AWS Security Agent dans le compte du client : le client
+    # l'assume pour appeler Continuum (le compte du MSP n'a pas les droits).
+    sa_role_arn: str | None = None
+    sa_external_id: str | None = None
     # EF-RAP-04 : bucket où le dossier de preuves est réellement téléversé.
     # Absent = aucun stockage configuré : la route répond 501 au lieu de
     # renvoyer 201 avec une clé S3 qui ne pointe vers rien.
@@ -77,6 +81,8 @@ class Settings:
             github_api=os.environ.get("REMPART_GITHUB_API", "https://api.github.com"),
             github_owner=os.environ.get("REMPART_GITHUB_OWNER", ""),
             sa_endpoint_url=os.environ.get("REMPART_SA_ENDPOINT_URL") or None,
+        sa_role_arn=os.environ.get("REMPART_SA_ROLE_ARN") or None,
+        sa_external_id=os.environ.get("REMPART_SA_EXTERNAL_ID") or None,
             reports_bucket=os.environ.get("REMPART_REPORTS_BUCKET") or None,
             cors_allow_origins=_origins("REMPART_CORS_ALLOW_ORIGINS"),
             pipeline_key=os.environ.get("REMPART_PIPELINE_KEY") or None,

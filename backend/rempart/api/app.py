@@ -183,7 +183,12 @@ def _default_sa(settings: Settings) -> Any:
         from rempart.orchestrator.sa_client import SecurityAgentClient
     except ImportError:
         return None
-    return SecurityAgentClient(endpoint_url=settings.sa_endpoint_url, region=settings.region)
+    return SecurityAgentClient(
+        endpoint_url=settings.sa_endpoint_url,
+        region=settings.region,
+        role_arn=settings.sa_role_arn,
+        external_id=settings.sa_external_id,
+    )
 
 def _parse_body(raw: Any) -> tuple[dict[str, Any], bool]:
     """Return (parsed_body, had_error) from the raw API Gateway v2 body field."""

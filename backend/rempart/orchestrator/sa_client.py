@@ -10,6 +10,8 @@ et retourne les champs documentés : ``agentSpaceId``, ``pentestJobId``,
 from collections.abc import Sequence
 from typing import Any
 
+import boto3
+
 
 def require_params(action: str, body: dict[str, Any], required: tuple[str, ...]) -> None:
     """Lever une ``ValueError`` explicite si un paramètre requis manque au corps."""
@@ -44,14 +46,29 @@ class SecurityAgentClient:
         boto_client: Any = None,
         endpoint_url: str | None = None,
         region: str = "eu-west-3",
+        role_arn: str | None = None,
+        external_id: str | None = None,
     ) -> None:
         self._client = boto_client
         self._endpoint_url = endpoint_url
         self._region = region
+        self._role_arn = role_arn
+        self._external_id = external_id
 
     @property
     def client(self) -> Any:
-        """Return the underlying boto3 client, creating it on first access."""
+        """Return the underlying boto3 client, creating it on first access.
+
+        INCIDENT RÉEL (13 nov 2026) : le rôle d'opérateur du client
+        (``rempart-ops-role``, porteur des droits ``securityagent:*``) n'était
+        **jamais assumé** — le client parlait Continuum avec les identifiants
+        du Lambda du plan de contrôle, qui n'ont aucun droit ``securityagent:``.
+        Résultat mesuré : ``AccessDeniedException … not authorized to perform:
+        securityagent:StartPentestJob``. La pile d'IAM (`sts:AssumeRole`) était
+        donc posée, et jamais utilisée. Quand un rôle est configuré, on l'assume
+        (avec l'external id du client) ; sinon on reste sur les identifiants
+        courants, ce qui convient au déploiement dans un compte unique.
+        """
         if self._client is None:
             import boto3
 
@@ -59,8 +76,25 @@ class SecurityAgentClient:
                 "securityagent",
                 endpoint_url=self._endpoint_url,
                 region_name=self._region,
+                **self._credentials(),
             )
         return self._client
+
+    def _credentials(self) -> dict[str, Any]:
+        """Credentials to assume the client's operator role, if one is configured."""
+        if not self._role_arn:
+            return {}
+
+        params: dict[str, Any] = {"RoleArn": self._role_arn}
+        if self._external_id:
+            params["ExternalId"] = self._external_id
+        assumed = boto3.client("sts", region_name=self._region).assume_role(**params)
+        creds = assumed["Credentials"]
+        return {
+            "aws_access_key_id": creds["AccessKeyId"],
+            "aws_secret_access_key": creds["SecretAccessKey"],
+            "aws_session_token": creds["SessionToken"],
+        }
 
     def create_agent_space(self, name: str, **kw: Any) -> dict[str, Any]:
         """CreateAgentSpace — requis : ``name``. Réponse : ``agentSpaceId``."""
