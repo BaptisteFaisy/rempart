@@ -8,5 +8,6 @@ fpdf2==2.9.0
 requests==2.34.2
 PyYAML==6.0.3
 strands-agents==1.64.0
+openai==3.50.0
 aws-cdk-lib==2.276.0
 constructs==10.8.1
