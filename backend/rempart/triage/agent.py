@@ -7,7 +7,7 @@ from typing import Any
 
 from rempart.common.models import Application, Decision, Finding
 
-from . import verdict_cache
+from . import llm, verdict_cache
 from .guardrails import HIGH_SEVERITIES, compute_finding_priority, enforce
 from .memory import MemoryMatch, memory_match
 from .prompts import SYSTEM_PROMPT, format_finding_for_prompt
@@ -25,23 +25,13 @@ LOGGER = logging.getLogger("rempart.triage.agent")
 
 
 def _strands_available() -> bool:
-    try:
-        import strands  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    # Une seule implémentation, partagée avec la revue de code (`review/`).
+    return llm.strands_available()
 
 
 def _is_real_strands_model(model_client: Any) -> bool:
     """Verify model_client is an actual Strands Model instance (not None or simple fake)."""
-    if model_client is None:
-        return False
-    try:
-        from strands.models.model import Model
-
-        return isinstance(model_client, Model)
-    except ImportError:
-        return False
+    return llm.is_real_model(model_client)
 
 
 def _build_strands_tools(ctx: TriageContext) -> list[Any]:
@@ -254,19 +244,16 @@ def _raw_proposals(
         except Exception as exc:  # noqa: BLE001 — un modèle saturé ne doit pas casser le lot
             LOGGER.warning(
                 "triage : modèle indisponible (%s: %s) — repli déterministe",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
-            return _deterministic_triage(
-                findings, app, known_findings, past_decisions, store=store
-            )
+            return _deterministic_triage(findings, app, known_findings, past_decisions, store=store)
         for proposal in raw_proposals:
             proposal.source = "model"
         verdict_cache.put_batch(fingerprints, raw_proposals)
         return raw_proposals
     LOGGER.info("triage : aucun modèle réel disponible — règleur déterministe")
-    return _deterministic_triage(
-        findings, app, known_findings, past_decisions, store=store
-    )
+    return _deterministic_triage(findings, app, known_findings, past_decisions, store=store)
 
 
 def run_triage(

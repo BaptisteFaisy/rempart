@@ -1,8 +1,24 @@
 """GitHub REST client for issue-based ticketing (EF-COR-01/02)."""
 
+import os
 from typing import Any
 
 import requests
+
+#: Jetons acceptés, du plus spécifique (prod, injecté depuis Secrets Manager)
+#: au plus générique (test local) — voir CONTRACT.md, variables d'environnement.
+#: Vivait dans `orchestrator/lambda_handlers.py` ; la revue de code en a le même
+#: besoin, donc une seule définition partagée (aucun duplicata à désynchroniser).
+GITHUB_TOKEN_ENVS = ("REMPART_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+
+def github_token_from_env() -> str | None:
+    """Premier jeton GitHub présent dans l'environnement, sinon ``None``."""
+    for name in GITHUB_TOKEN_ENVS:
+        token = os.environ.get(name)
+        if token:
+            return token
+    return None
 
 
 class GitHubClient:
@@ -12,10 +28,10 @@ class GitHubClient:
         self.token = token
         self.api = api.rstrip("/")
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, accept: str = "application/vnd.github+json") -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.token}",
-            "Accept": "application/vnd.github+json",
+            "Accept": accept,
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
@@ -52,3 +68,17 @@ class GitHubClient:
             timeout=30,
         )
         resp.raise_for_status()
+
+    def fetch_diff(self, path: str) -> str:
+        """Récupère un diff au format `application/vnd.github.diff`.
+
+        `path` est relatif à l'API (ex. `repos/o/r/pulls/42`). C'est la seule
+        façon d'obtenir le diff d'une PR sans recalculer soi-même les fichiers :
+        GitHub fournit le diff exact que le merge introduirait.
+        """
+        url = f"{self.api}/{path.lstrip('/')}"
+        resp = requests.get(
+            url, headers=self._headers(accept="application/vnd.github.diff"), timeout=30
+        )
+        resp.raise_for_status()
+        return resp.text

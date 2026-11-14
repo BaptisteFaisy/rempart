@@ -15,7 +15,6 @@ et la capture d'exception qui empêche Step Functions de rejouer à l'infini
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -24,15 +23,14 @@ from rempart.common.store import Store
 
 from . import tasks
 from .discovery import DISCOVERY_WINDOW_MINUTES, discover_cicd_runs
-from .github_client import GitHubClient
+from .github_client import GitHubClient, github_token_from_env
 from .sa_client import SecurityAgentClient
 from .task_types import Deps
 
 LOGGER = logging.getLogger("rempart.orchestrator.lambda_handlers")
 
-#: Jetons acceptés, du plus spécifique (prod, injecté depuis Secrets Manager)
-#: au plus générique (test local) — voir CONTRACT.md, variables d'environnement.
-GITHUB_TOKEN_ENVS = ("REMPART_GITHUB_TOKEN", "GITHUB_TOKEN")
+#: Jeton GitHub : `GITHUB_TOKEN_ENVS` et `github_token_from_env` vivent dans
+#: `orchestrator/github_client.py`, partagés avec la revue de code (`review/`).
 
 TaskFn = Callable[[dict[str, Any], Deps], dict[str, Any]]
 DepsFactory = Callable[[], Deps]
@@ -44,11 +42,7 @@ HandlerFn = Callable[..., dict[str, Any]]
 # --------------------------------------------------------------------------- #
 def _github_token() -> str | None:
     """Premier jeton GitHub présent dans l'environnement, sinon ``None``."""
-    for name in GITHUB_TOKEN_ENVS:
-        token = os.environ.get(name)
-        if token:
-            return token
-    return None
+    return github_token_from_env()
 
 
 def _model_client() -> Any:
@@ -118,9 +112,7 @@ def _as_int(value: Any) -> int:
         return 0
 
 
-def _count_iteration(
-    event: dict[str, Any] | None, result: dict[str, Any]
-) -> dict[str, Any]:
+def _count_iteration(event: dict[str, Any] | None, result: dict[str, Any]) -> dict[str, Any]:
     """Incrémente le compteur de boucle (240 × 60 s = 4 h, § 3).
 
     ``tasks.poll_run`` ne connaît pas ce compteur et ``tasks.py`` appartient à
