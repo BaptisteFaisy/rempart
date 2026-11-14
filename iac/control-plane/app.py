@@ -51,6 +51,16 @@ def build_core_stacks(app: cdk.App, env: cdk.Environment) -> dict[str, Any]:
     """Storage, identité, API et orchestrateur : le cœur du plan de contrôle."""
     storage = StorageStack(app, "RempartStorageStack", env=env)
     identity = IdentityStack(app, "RempartIdentityStack", env=env)
+    # L'orchestrateur est construit AVANT l'API : la Lambda API doit connaître
+    # l'ARN de sa machine de retest (idée #51) pour pouvoir la démarrer quand une
+    # pull request de correction est mergée. Rien d'autre ne change de dépendance.
+    orchestrator = OrchestratorStack(
+        app,
+        "RempartOrchestratorStack",
+        env=env,
+        tables=storage.tables,
+        table_prefix=storage.table_prefix,
+    )
     api = ApiStack(
         app,
         "RempartApiStack",
@@ -62,13 +72,10 @@ def build_core_stacks(app: cdk.App, env: cdk.Environment) -> dict[str, Any]:
         reports_bucket=storage.reports_bucket,
         portal_origins=portal_origins(),
         pipeline_key_param=os.environ.get("REMPART_PIPELINE_KEY_SSM_PARAM") or None,
-    )
-    orchestrator = OrchestratorStack(
-        app,
-        "RempartOrchestratorStack",
-        env=env,
-        tables=storage.tables,
-        table_prefix=storage.table_prefix,
+        github_webhook_secret_param=(
+            os.environ.get("REMPART_GITHUB_WEBHOOK_SECRET_SSM_PARAM") or None
+        ),
+        retest_machine=orchestrator.pentest_lifecycle,
     )
     return {"storage": storage, "identity": identity, "api": api, "orchestrator": orchestrator}
 

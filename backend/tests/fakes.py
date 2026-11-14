@@ -5,7 +5,12 @@ fichier) ; ce fichier les ré-exporte pour que les tests continuent d'écrire
 ``from tests.fakes import FakeStore``.
 """
 
-from tests.fakes_io import FakeGitHub, FakeS3, FakeS3Object
+from tests.fakes_io import (
+    FakeGitHub,
+    FakeRetestStarter,
+    FakeS3,
+    FakeS3Object,
+)
 from tests.fakes_sa import FakeModelClient, FakeSecurityAgentClient
 from tests.fakes_store import FakeDdbResource, FakeDdbTable, FakeStore
 
@@ -14,6 +19,7 @@ __all__ = [
     "FakeDdbTable",
     "FakeGitHub",
     "FakeModelClient",
+    "FakeRetestStarter",
     "FakeS3",
     "FakeS3Object",
     "FakeSecurityAgentClient",

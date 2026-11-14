@@ -285,7 +285,32 @@ class OrchestratorStack(cdk.Stack):
     # ------------------------------------------------------------------ #
     # Machine A — RempartPentestLifecycle
     # ------------------------------------------------------------------ #
-    def _poll_loop(self, scope: Construct, tail: sfn.IChainable) -> sfn.IChainable:
+    def _routed_tail(
+        self,
+        scope: Construct,
+        tail: sfn.IChainable,
+        retest_tail: sfn.IChainable | None,
+    ) -> sfn.IChainable:
+        """Idée #51 : un run déclenché par une fusion ne repasse pas par le parcours
+        complet (tri → tickets → remédiation) — il reteste puis ferme.
+
+        Le routage vit **à l'intérieur** du cas « run terminé », jamais avant :
+        un job arrêté par le garde-fou de budget n'a aucune preuve de fermeture,
+        et `close_or_reopen` sur un run vide fermerait des failles encore
+        présentes. C'est le pire défaut possible pour un produit de sécurité :
+        déclarer corrigé ce qui ne l'est pas.
+        """
+        if retest_tail is None:
+            return tail
+        return (
+            sfn.Choice(scope, "RetestRoutingChoice", state_name="RetestRouting")
+            .when(sfn.Condition.string_equals("$.trigger", "retest"), retest_tail)
+            .otherwise(tail)
+        )
+
+    def _poll_loop(
+        self, scope: Construct, tail: sfn.IChainable, retest_tail: sfn.IChainable | None = None
+    ) -> sfn.IChainable:
         """start_run -> poll every 60 s under the 4 h cap -> findings tail."""
         wait = sfn.Wait(
             scope,
@@ -310,7 +335,10 @@ class OrchestratorStack(cdk.Stack):
         )
         completed = (
             sfn.Choice(scope, "IsRunCompletedChoice", state_name="IsRunCompleted")
-            .when(sfn.Condition.string_equals("$.run_status", "completed"), tail)
+            .when(
+                sfn.Condition.string_equals("$.run_status", "completed"),
+                self._routed_tail(scope, tail, retest_tail),
+            )
             .otherwise(not_completed)
         )
         finished = (
@@ -331,7 +359,9 @@ class OrchestratorStack(cdk.Stack):
 
     def _build_pentest_lifecycle(self) -> sfn.StateMachine:
         scope = Construct(self, "PentestLifecycleScope")
-        start = self._poll_loop(scope, self._findings_tail(scope))
+        start = self._poll_loop(
+            scope, self._findings_tail(scope), self._close_block(scope)
+        )
         gate = self._invoke(scope, "BudgetGateTask", "budget_gate", "BudgetGate")
         refused = sfn.Succeed(scope, "RefusedState", state_name="Refused")
         gate.next(
@@ -361,12 +391,14 @@ class OrchestratorStack(cdk.Stack):
             timeout=cdk.Duration.minutes(15),
         )
 
-    # ------------------------------------------------------------------ #
-    # Machine C — RempartRetestClose
-    # ------------------------------------------------------------------ #
-    def _build_retest_close(self) -> sfn.StateMachine:
-        """Closure with proof (8.4) or reopening on regression."""
-        scope = Construct(self, "RetestCloseScope")
+    def _close_block(self, scope: Construct) -> sfn.IChainable:
+        """close_or_reopen → issue (fermée avec preuve / réouverte / inchangé).
+
+        Partagé par la machine C (déclenchée à la main ou par le planificateur)
+        et par la branche `retest` de la machine A : une seule implémentation de
+        la fermeture, donc un seul endroit où la preuve de fermeture (EF-COR-04)
+        et la réouverture en régression (EF-TRI-06) peuvent être fausses.
+        """
         close = self._invoke(scope, "CloseOrReopenTask", "close_or_reopen", "CloseOrReopen")
         outcome = (
             sfn.Choice(scope, "RetestOutcomeChoice", state_name="RetestOutcome")
@@ -381,11 +413,19 @@ class OrchestratorStack(cdk.Stack):
             .otherwise(sfn.Succeed(scope, "NoChangeState", state_name="NoChange"))
         )
         close.next(outcome)
+        return close
+
+    # ------------------------------------------------------------------ #
+    # Machine C — RempartRetestClose
+    # ------------------------------------------------------------------ #
+    def _build_retest_close(self) -> sfn.StateMachine:
+        """Closure with proof (8.4) or reopening on regression."""
+        scope = Construct(self, "RetestCloseScope")
         return sfn.StateMachine(
             self,
             "RetestCloseMachine",
             state_machine_name="RempartRetestClose",
-            definition_body=sfn.DefinitionBody.from_chainable(close),
+            definition_body=sfn.DefinitionBody.from_chainable(self._close_block(scope)),
             timeout=cdk.Duration.minutes(5),
         )
 

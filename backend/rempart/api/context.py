@@ -27,6 +27,14 @@ class ApiContext:
     s3: Any = None
     # Origine de la requête, pour un CORS restreint aux origines autorisées.
     origin: str | None = None
+    # Corps **brut** de la requête, tel qu'arrivé. Indispensable au webhook
+    # GitHub : sa signature porte sur ces octets, pas sur un JSON ré-écrit —
+    # hacher le dictionnaire analysé donnerait une signature différente.
+    raw_body: str | None = None
+    # Démarreur d'exécutions de la machine de retest (idée #51). `None` quand
+    # aucune machine n'est configurée : la route pose l'état et le dit, au lieu
+    # d'annoncer un retest qui ne partira jamais.
+    retest: Any = None
 
     def audit(
         self,
