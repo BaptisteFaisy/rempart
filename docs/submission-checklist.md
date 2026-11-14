@@ -4,21 +4,21 @@
 > Deadline: **Friday 11 December 2026, 12:00 PT** (21:00 Paris).
 > Judging ends 22 January 2027 — the solution must stay online until then.
 >
-> Statuses are honest as of **11 November 2026**. Nothing is deployed on AWS
-> yet: no credentials were available. Everything under "code" is done and
-> green. **The control plane is now deployed on AWS** (account 710332178565,
-> region eu-north-1) and the portal is live on CloudFront — see
-> [`deployment-eu-north-1.md`](deployment-eu-north-1.md) and
-> [`portal-deployment.md`](portal-deployment.md). What remains blocked is a
-> **real Continuum test run**, which must not start before 23 November 2026.
+> Statuses are honest as of **14 November 2026**. Cognito is active, the
+> CloudFront portal and API are online, and the remaining runtime gate is the
+> first real Continuum test. It must not start before **23 November 2026** and
+> must not be unlocked until the customer account's free-trial eligibility is
+> verified and recorded. See [`deployment-eu-north-1.md`](deployment-eu-north-1.md),
+> [`portal-deployment.md`](portal-deployment.md), and
+> [`runbook-premier-test.md`](runbook-premier-test.md).
 
 | # | Requirement | Status | Proof / what is left |
 |---|---|---|---|
 | 1 | Track 2 selected, AWS AI service named | **to do** (form) | Text ready: [`devpost-submission.md`](devpost-submission.md). Service to name: AWS Continuum (penetration testing) + Amazon Bedrock via Strands Agents on AgentCore Runtime. |
 | 2 | Description in English: features, problem, measured outcomes | **done** | [`devpost-submission.md`](devpost-submission.md) § Description, How we built it, three measured outcomes. |
-| 3 | Public URL of the portal, with demo credentials in the test instructions | **done** | Two live URLs. The **free one — and the one to use for judging — is **https://tradoooo.github.io/rempart/** (GitHub Pages): no backend, no AWS account, **0 $**, no outbound call, no real customer data on a public URL. The second, **https://d1o2xnfrq8xomh.cloudfront.net** (CloudFront + S3, deployed stack `RempartPortalStack`, measured HTTP 200 on `/`, on the JS/CSS assets and on the deep route `/fleet`), is the optional AWS-backed deployment — it is the billable stack, not the demo. Both serve the **offline demo mode** on the frozen dataset — no real customer data on a public URL, and the portal says so with a banner. Real Cognito sign-in is not active yet: the user pool `eu-north-1_VkUAsvgSR` has **no Cognito domain** and the client has no callback URLs, so the PKCE flow cannot run. The 4 steps to enable it are written in [`portal-deployment.md`](portal-deployment.md). |
+| 3 | Public URL of the portal, with demo credentials in the test instructions | **done** | GitHub Pages remains the free judging demo: https://tradoooo.github.io/rempart/. The AWS-backed portal is online at https://d1o2xnfrq8xomh.cloudfront.net and the API is online at https://qm6dmdkgdg.execute-api.eu-north-1.amazonaws.com. Cognito is **active** with authorization-code + PKCE; the hosted domain and callback configuration are recorded in [`portal-deployment.md`](portal-deployment.md). Keep public judging on the frozen, offline dataset; do not expose customer data. |
 | 4 | Private repo shared with `testing@devpost.com` and `aws-msp@amazon.com` | **decision needed** | The repository is currently **public** (it was created private; the visibility changed outside this work). The specification asks for a *private* repo shared with the two judge accounts. A public repo is generally accepted by Devpost, but it exposes the French specification — commercial strategy, pricing hypotheses, schedule. **Your call**: keep it public, or set it back to private (GitHub Pages keeps working on a Pro plan) and invite the judge accounts at submission time. |
-| 5 | The code really calls an AWS AI service at runtime | **blocked** | Calls are written and unit-tested against the official API reference ([`docs/api-verification.md`](api-verification.md)), but never executed against AWS. Needs credentials + one real `StartPentestJob`. Note: the free trial starts at the **first** pentest — the spec (§ 16.2) says do not run it before **23 November 2026** so the 2-month trial still covers judging on 22 January 2027. |
+| 5 | The code really calls an AWS AI service at runtime | **blocked until 23 Nov** | Calls are written and unit-tested against the official API reference ([`docs/api-verification.md`](api-verification.md)). The first real `StartPentestJob` is reserved for **23 November 2026** and is forbidden until the customer account's free-trial eligibility has been checked in Billing and Continuum, recorded in the run evidence, and confirmed for the tenant. Follow [`runbook-premier-test.md`](runbook-premier-test.md); if eligibility is absent or ambiguous, use the frozen demo and do not start a job. |
 | 6 | Video ~3 minutes, public on YouTube, English, no third-party brand or music | **out of scope for the agent** | Script written and timed: [`video-script.md`](video-script.md). The user records and edits. |
 | 7 | Architecture diagram | **done** | Mermaid diagrams in [`HLD.md`](HLD.md) (control plane + customer account) and in [`README.md`](../README.md); sequence diagram of a delivery and finding lifecycle state diagram in the specification § 11.4-11.5. |
 | 8 | Design document (HLD) | **done** | [`HLD.md`](HLD.md). |
@@ -48,7 +48,7 @@
 | Triage memory (EF-TRI-09) | **done** | `rempart/triage/memory.py` — past human decisions on the same fingerprint drive the next proposal, most recent wins, per application. The matrix still computes priority and a Critical/High finding still requires a human, memory or not. |
 | Deadline reminders (EF-COR-06) | **done** | `rempart/orchestrator/reminders.py` — classifies each open finding as `upcoming` / `overdue` / `escalate`, notifies through the existing `deadline_overdue` kind, and writes an audit event so a looping scanner **never re-notifies** (anti-spam without adding a model field). Scheduled hourly in CDK; `now` is injectable so all 13 tests are deterministic. |
 | Risk acceptance (EF-COR-07) | **done** | `Finding.risk_review_at` / `risk_review_by`, restricted to the client's `client_security` role — an MSP analyst gets 403 (specification ch. 6), a client from another tenant gets 403, and an empty justification gets 400. Survives a `to_item`/`from_item` round trip. |
-| Screenshots in the repo (idea #42) | **done** | The repository had **no image at all**. `scripts/capture_screenshots.sh` starts the local API + Vite, captures the 9 portal pages with headless Chrome and stops itself. Images committed in `docs/img/`, embedded in the README (5 secondary ones folded in `<details>`). Reproducible by anyone, no AWS account, no cost. |
+| Screenshots in the repo (idea #42) | **done** | The repository had **no image at all**. `scripts/capture_screenshots.sh` starts the local API + Vite, captures the portal pages with headless Chrome and stops itself. Images committed in `docs/img/`, embedded in the README (5 secondary ones folded in `<details>`). Reproducible by anyone, no AWS account, no cost. For the submission video, use [`video-capture-checklist.md`](video-capture-checklist.md): it separates frozen-demo portal captures from real customer-account evidence captured only after the 23/11 gate. |
 | Prompt-injection resistance proven (idea #11) | **done** | A **real hole was found and fixed**: `format_finding_for_prompt` interpolated finding content unescaped, so a description containing `</finding>` could close the data block and inject an instruction. Fixed by `sanitize_untrusted()`; the contract is now exactly one opening and one closing tag regardless of content. 42 tests prove: priority unchanged despite the injected instruction, a model that DID yield is caught by `enforce` (matrix wins + human validation forced), delimiter inviolable, no write tool other than `submit_triage_proposal`, hostile content cannot break the pipeline. |
 | Domain verification choice (idea #33) | **done** | Official doc confirms three methods: `DNS_TXT | HTTP_ROUTE | PRIVATE_VPC`. **`HTTP_ROUTE` needs no DNS access** — publishing a token on a route is enough, which removes the need to buy a DNS zone for a demo. Onboarding was hard-coded to `DNS_TXT`; the method is now a validated parameter (400 before any AWS call) and the response returns an actionable instruction per domain. 9 tests. |
 | "Not just a wrapper" narrative (idea #78) | **done** | [`what-rempart-adds.md`](what-rempart-adds.md) — states plainly what Continuum already does, then the 7 gaps a managed service must fill, each with the file or test that proves it. Answers the top risk of specification chapter 20. |
@@ -78,15 +78,21 @@ https://aws-agentic-msp.devpost.com/ before running this.
 
 ## Blockers, in the order they must be cleared
 
-1. **AWS credentials** — one IAM user (`rempart-deployer`) with an access key,
-   region `eu-west-3`. Unblocks items 3 and 5 and the whole demo.
-2. **Is the AWS account new?** The 2-month / 400 task-hours free trial is
-   granted to *new* Continuum customers. If the account is old, the first test
-   costs real money (~173 $ for a simple API). This decides whether we run a
-   real test or demo on recorded data.
+1. **Free-trial eligibility for the customer account** — on 23 November, verify
+   AWS Billing → Free Tier and the Continuum console before any start request.
+   Record the account, region, timestamp, evidence screenshot and operator in
+   [`runbook-premier-test.md`](runbook-premier-test.md). If either check is
+   missing, ambiguous or negative, stop and use the frozen demo.
+2. **AWS credentials and deployment session** — use the least-privilege
+   deployment session already documented for the control plane; never place
+   credentials in the repository or screenshots.
 3. **Mergify app authorised on `rempart`** — otherwise every PR waits for a
    human merge.
 4. **`AUTOMERGE_PAT` secret** — otherwise the conflict agent can resolve but not
    publish.
-5. **Do not run the first pentest before 23 November 2026** (specification
-   § 16.2), so the free trial still covers judging on 22 January 2027.
+5. **Date gate** — do not run the first pentest before **23 November 2026** so
+   the two-month trial still covers judging on 22 January 2027.
+
+**Hard stop:** no `StartPentestJob`—directly or through the run API—until item 1
+is complete and `free_tier_confirmed` is explicitly set for the target tenant.
+The default `REMPART_FREE_TIER_ONLY=1` must remain enabled.
