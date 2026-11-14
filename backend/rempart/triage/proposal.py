@@ -3,6 +3,15 @@
 from dataclasses import dataclass
 from typing import Any
 
+from rempart.common.normalize import as_bool, as_flat_strings, as_optional_id
+
+# Les normaliseurs étaient privés de ce module ; ils sont maintenant partagés
+# avec la revue de code (`review/`), qui a le même besoin. Alias conservés pour
+# la lecture du code ci-dessous.
+_as_bool = as_bool
+_as_optional_id = as_optional_id
+_as_references = as_flat_strings
+
 
 @dataclass
 class TriageProposal:
@@ -71,46 +80,3 @@ class TriageProposal:
             # Un dictionnaire ne peut venir que du modèle (l'outil de soumission).
             source=str(d.get("source") or "model"),
         )
-
-
-#: Ce qu'un modèle peut écrire pour « faux » : la chaîne "false" est vraie en
-#: Python (`bool("false")` → True), c'est exactement le piège mesuré le 13/11.
-_FALSEY = {"false", "no", "0", "none", "null", "", "nil"}
-
-
-def _as_bool(value: Any) -> bool:
-    """Lit un booléen venu d'un modèle : vrai, faux, ou « false » en chaîne."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        return value.strip().lower() not in _FALSEY
-    return bool(value)
-
-
-def _as_optional_id(value: Any) -> str | None:
-    """Un identifiant absent : ``None``, pas la chaîne « false »."""
-    if value is None or isinstance(value, bool):
-        return None
-    text = str(value).strip()
-    if text.lower() in _FALSEY:
-        return None
-    return text or None
-
-
-def _as_references(value: Any) -> list[str]:
-    """Liste de références : chaînes, à plat, sans doublon ni vide."""
-    if not value:
-        return []
-    if isinstance(value, str):
-        value = [value]
-    flat: list[str] = []
-    for item in value:
-        if isinstance(item, (list, tuple, set)):
-            flat.extend(_as_references(item))
-            continue
-        text = str(item).strip()
-        if text and text not in flat:
-            flat.append(text)
-    return flat

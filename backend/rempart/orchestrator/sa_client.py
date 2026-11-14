@@ -7,10 +7,36 @@ et retourne les champs documentés : ``agentSpaceId``, ``pentestJobId``,
 ``pentestSummaries``, ``pentestJobSummaries``, ``findingsSummaries``, etc.
 """
 
+import os
 from collections.abc import Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import boto3
+
+from .sts_session import session_name
+
+#: Durée de vie prudentielle quand aucune expiration n'est renvoyée (faux client
+#: de test, réponse partielle) : un peu moins que l'heure par défaut d'STS.
+_FALLBACK_LIFETIME = timedelta(minutes=55)
+
+
+def _expiration_utc(raw: Any) -> datetime | None:
+    """Expiration en UTC, depuis un `datetime` boto3 ou une chaîne ISO.
+
+    boto3 renvoie déjà un `datetime` aware en UTC ; un faux client de test peut
+    renvoyer une chaîne. Les deux formes sont acceptées, et toute valeur
+    illisible vaut « pas d'expiration connue » (aucun renouvellement forcé).
+    """
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    if isinstance(raw, str):
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
 
 
 def require_params(action: str, body: dict[str, Any], required: tuple[str, ...]) -> None:
@@ -54,6 +80,8 @@ class SecurityAgentClient:
         self._region = region
         self._role_arn = role_arn
         self._external_id = external_id
+        #: Expiration des identifiants assumés (``None`` = pas d'assomption).
+        self._expires_at: datetime | None = None
 
     @property
     def client(self) -> Any:
@@ -68,28 +96,57 @@ class SecurityAgentClient:
         donc posée, et jamais utilisée. Quand un rôle est configuré, on l'assume
         (avec l'external id du client) ; sinon on reste sur les identifiants
         courants, ce qui convient au déploiement dans un compte unique.
-        """
-        if self._client is None:
-            import boto3
 
-            self._client = boto3.client(
-                "securityagent",
-                endpoint_url=self._endpoint_url,
-                region_name=self._region,
-                **self._credentials(),
-            )
+        Les identifiants assumés expirent (1 h par défaut) : un client mis en
+        cache sans date d'expiration rend `ExpiredToken` sur l'invocation
+        suivante d'un conteneur réchauffé. L'orchestrateur suit un job jusqu'à
+        4 h, donc le cas est réel — le client est reconstruit à l'échéance.
+        """
+        if self._client is None or self._expired():
+            self._client = self._build_client()
         return self._client
+
+    def _expired(self) -> bool:
+        """Vrai si les identifiants assumés ont atteint leur date d'expiration."""
+        if self._expires_at is None:
+            return False
+        return datetime.now(timezone.utc) >= self._expires_at
+
+    def _build_client(self) -> Any:
+        """Construit le client boto3, en renouvelant l'assomption si besoin."""
+        import boto3
+
+        credentials = self._credentials()
+        return boto3.client(
+            "securityagent",
+            endpoint_url=self._endpoint_url,
+            region_name=self._region,
+            **credentials,
+        )
 
     def _credentials(self) -> dict[str, Any]:
         """Credentials to assume the client's operator role, if one is configured."""
         if not self._role_arn:
             return {}
 
-        params: dict[str, Any] = {"RoleArn": self._role_arn}
-        if self._external_id:
-            params["ExternalId"] = self._external_id
+        # STS exige RoleSessionName (botocore le valide localement, avant tout
+        # appel réseau). Nom stable par application Lambda : la session est
+        # identifiable dans CloudTrail, sans injecter de secret.
+        session = session_name(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+        params: dict[str, Any] = {
+            "RoleArn": self._role_arn,
+            "RoleSessionName": session,
+        }
+        if not self._external_id:
+            raise ValueError(
+                "REMPART_SA_EXTERNAL_ID requis quand REMPART_SA_ROLE_ARN est configuré"
+            )
+        params["ExternalId"] = self._external_id
         assumed = boto3.client("sts", region_name=self._region).assume_role(**params)
         creds = assumed["Credentials"]
+        self._expires_at = _expiration_utc(creds.get("Expiration")) or (
+            datetime.now(timezone.utc) + _FALLBACK_LIFETIME
+        )
         return {
             "aws_access_key_id": creds["AccessKeyId"],
             "aws_secret_access_key": creds["SecretAccessKey"],

@@ -52,6 +52,7 @@ def _headers_for(
         headers.update(_CORS_PREFLIGHT_HEADERS)
     return headers
 
+
 @dataclass
 class _Request:
     """Request fields extracted from an API Gateway HTTP API v2 event."""
@@ -62,6 +63,7 @@ class _Request:
     headers: dict[str, str] = field(default_factory=dict)
     body: Any = None
 
+
 def get_router() -> Router:
     """Return the singleton Router with every route module registered."""
     global _router
@@ -70,6 +72,7 @@ def get_router() -> Router:
         register_all(router)
         _router = router
     return _router
+
 
 def _respond(
     status_code: int,
@@ -85,6 +88,7 @@ def _respond(
         "body": json.dumps(body),
     }
 
+
 def _parse_request(event: dict[str, Any]) -> _Request:
     """Extract method, path, query, headers, and raw body from the event."""
     request_context = event.get("requestContext", {})
@@ -95,6 +99,7 @@ def _parse_request(event: dict[str, Any]) -> _Request:
         headers=event.get("headers") or {},
         body=event.get("body"),
     )
+
 
 def _authorizer_of(event: dict[str, Any]) -> dict[str, Any]:
     """Le bloc `requestContext.authorizer` de l'événement, jamais `None`."""
@@ -128,7 +133,7 @@ def _shape_of(value: Any) -> str:
     if not isinstance(value, str):
         return type(value).__name__
     first = value[:1] or "-"
-    return f"str(len={len(value)},first={first},quoted={'\"' in value})"
+    return f"str(len={len(value)},first={first},quoted={'"' in value})"
 
 
 def _log_authorizer_shape_once(authorizer: dict[str, Any]) -> None:
@@ -177,6 +182,7 @@ def _resolve_principal(event: dict[str, Any]) -> Principal | None:
     except AuthError:
         return None
 
+
 def _default_sa(settings: Settings) -> Any:
     """Lazily build the real Security Agent client; None if orchestrator is absent."""
     try:
@@ -189,6 +195,7 @@ def _default_sa(settings: Settings) -> Any:
         role_arn=settings.sa_role_arn,
         external_id=settings.sa_external_id,
     )
+
 
 def _parse_body(raw: Any) -> tuple[dict[str, Any], bool]:
     """Return (parsed_body, had_error) from the raw API Gateway v2 body field."""
@@ -204,6 +211,7 @@ def _parse_body(raw: Any) -> tuple[dict[str, Any], bool]:
         return {}, True
     return parsed, False
 
+
 def _build_context(
     event: dict[str, Any],
     request: _Request,
@@ -214,6 +222,7 @@ def _build_context(
     settings: Settings,
     s3: Any = None,
     retest: Any = None,
+    model_client: Any = None,
 ) -> ApiContext:
     """Assemble the ApiContext handed to a route handler."""
     return ApiContext(
@@ -229,7 +238,9 @@ def _build_context(
         origin=_origin_of(request),
         raw_body=request.body if isinstance(request.body, str) else None,
         retest=retest,
+        model_client=model_client,
     )
+
 
 def _dispatch(handler: Handler, ctx: ApiContext) -> dict[str, Any]:
     """Run a handler and convert its outcome (or exception) into a response."""
@@ -242,6 +253,7 @@ def _dispatch(handler: Handler, ctx: ApiContext) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive catch-all
         return _respond(500, {"error": f"Internal server error: {exc}"}, origin, settings)
     return _respond(status_code, payload, origin, settings)
+
 
 def _default_s3(settings: Settings) -> Any:
     """Client S3 réel du dossier de preuves, `None` si aucun bucket configuré.
@@ -311,6 +323,7 @@ def lambda_handler(
     s3: Any = None,
     retest: Any = None,
     settings: Settings | None = None,
+    model_client: Any = None,
 ) -> dict[str, Any]:
     """Handle an API Gateway HTTP API v2 request, dispatching to the matched route."""
     settings = settings or Settings.from_env()
@@ -345,6 +358,16 @@ def lambda_handler(
 
     handler, path_params = matched
     ctx = _build_context(
-        event, request, body, path_params, store, sa, settings, s3, retest
+        event,
+        request,
+        body,
+        path_params,
+        store,
+        sa,
+        settings,
+        s3,
+        retest,
+        model_client,
     )
+    ctx.origin = origin  # une seule lecture de l'origine pour tout le tour
     return _dispatch(handler, ctx)

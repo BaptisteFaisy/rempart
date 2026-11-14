@@ -35,6 +35,10 @@ class ApiContext:
     # aucune machine n'est configurée : la route pose l'état et le dit, au lieu
     # d'annoncer un retest qui ne partira jamais.
     retest: Any = None
+    # Client du modèle (Strands/InferHub) : injecté par les tests et le banc,
+    # construit depuis l'environnement sinon. `None` ne veut pas dire « pas de
+    # modèle » : la revue répond alors 503 plutôt qu'une revue vide.
+    model_client: Any = None
 
     def audit(
         self,

@@ -63,6 +63,8 @@ class _FallbackModel(Model):
     def __init__(self, models: list[Any]) -> None:
         super().__init__()
         self._models = list(models)
+        #: Le modèle qui a réellement répondu (traçabilité), sinon ``None``.
+        self.last_used: Any = None
 
     def update_config(self, **model_config: Any) -> None:
         """Applique la configuration à tous les modèles de la chaîne."""
@@ -95,10 +97,67 @@ class _FallbackModel(Model):
                     messages, tool_specs=tool_specs, system_prompt=system_prompt, **kwargs
                 ):
                     yield event
+                # Le modèle qui a réellement répondu est celui qu'on trace :
+                # `get_config()` ne renvoie que le premier de la chaîne.
+                self.last_used = model
                 return
             except Exception as exc:  # noqa: BLE001 — on essaie le suivant
                 last_error = exc
         raise last_error if last_error else RuntimeError("aucun modèle disponible")
+
+
+def strands_available() -> bool:
+    """Vrai si `strands-agents` est importable (le layer Lambda l'embarque)."""
+    try:
+        import strands  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def is_real_model(model_client: Any) -> bool:
+    """Vrai si ``model_client`` est un vrai modèle Strands, pas un faux de test.
+
+    Déplacé ici depuis `triage/agent.py` (où il était privé) parce que la revue
+    de code a la même exigence : un faux client ne doit jamais faire croire
+    qu'un modèle a travaillé. C'est la différence entre « la revue vient d'un
+    agent » et « la revue est vide parce qu'aucun modèle n'était branché ».
+    """
+    if model_client is None:
+        return False
+    try:
+        from strands.models.model import Model
+
+        return isinstance(model_client, Model)
+    except ImportError:
+        return False
+
+
+def model_label(model_client: Any) -> str | None:
+    """Identifiant du modèle en usage, pour la trace d'audit (jamais la clé).
+
+    Avec une chaîne de repli (`_FallbackModel`), on rend le modèle qui a
+    **réellement répondu**, pas le premier de la liste : sinon la preuve dirait
+    « combo/cheap a trié » alors que c'est `ali/glm-5.2` qui a répondu.
+    """
+    used = getattr(model_client, "last_used", None)
+    for client in [used, model_client] if used is not None else [model_client]:
+        label = _config_label(client)
+        if label:
+            return label
+    return None
+
+
+def _config_label(model_client: Any) -> str | None:
+    """`model`/`model_id` de la configuration d'un modèle Strands."""
+    try:
+        config = model_client.get_config()
+    except Exception:  # noqa: BLE001 — un label absent ne doit pas casser la revue
+        return None
+    if isinstance(config, dict):
+        return str(config.get("model") or config.get("model_id") or "") or None
+    return str(config) if config else None
 
 
 def llm_configured() -> bool:
@@ -207,6 +266,9 @@ __all__ = [
     "api_key_from_ssm",
     "base_url",
     "build_model_client",
+    "is_real_model",
     "llm_configured",
     "model_ids",
+    "model_label",
+    "strands_available",
 ]

@@ -5,6 +5,7 @@ les champs de réponse documentés. Un paramètre requis manquant doit lever une
 erreur explicite plutôt que de partir en 400 côté AWS.
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -25,9 +26,7 @@ class _RecordingClient:
             "batch_get_pentest_jobs": {"pentestJobs": [{"pentestJobId": "job-1"}]},
             "list_findings": {"findingsSummaries": [{"findingId": "f-1"}]},
             "list_pentests": {"pentestSummaries": [{"pentestId": "pt-1"}]},
-            "list_pentest_jobs_for_pentest": {
-                "pentestJobSummaries": [{"pentestJobId": "job-9"}]
-            },
+            "list_pentest_jobs_for_pentest": {"pentestJobSummaries": [{"pentestJobId": "job-9"}]},
             "list_pentest_job_tasks": {
                 "taskSummaries": [
                     {"taskId": "task-1", "pentestJobId": "job-1", "taskHours": 0.75},
@@ -109,9 +108,7 @@ def test_stop_pentest_job_exige_espace_et_job():
 
 def test_batch_get_pentest_jobs_lit_pentest_jobs():
     client, boto = _client()
-    assert client.batch_get_pentest_jobs("space-1", ["job-1"]) == [
-        {"pentestJobId": "job-1"}
-    ]
+    assert client.batch_get_pentest_jobs("space-1", ["job-1"]) == [{"pentestJobId": "job-1"}]
     assert boto.calls[-1] == (
         "batch_get_pentest_jobs",
         {"agentSpaceId": "space-1", "pentestJobIds": ["job-1"]},
@@ -129,9 +126,7 @@ def test_list_pentests_lit_pentest_summaries():
 
 def test_list_pentest_jobs_for_pentest_lit_les_summaries():
     client, boto = _client()
-    assert client.list_pentest_jobs_for_pentest("space-1", "pt-1") == [
-        {"pentestJobId": "job-9"}
-    ]
+    assert client.list_pentest_jobs_for_pentest("space-1", "pt-1") == [{"pentestJobId": "job-9"}]
     assert boto.calls[-1] == (
         "list_pentest_jobs_for_pentest",
         {"agentSpaceId": "space-1", "pentestId": "pt-1"},
@@ -140,9 +135,7 @@ def test_list_pentest_jobs_for_pentest_lit_les_summaries():
 
 def test_list_findings_lit_findings_summaries():
     client, boto = _client()
-    assert client.list_findings("space-1", pentest_job_id="job-1") == [
-        {"findingId": "f-1"}
-    ]
+    assert client.list_findings("space-1", pentest_job_id="job-1") == [{"findingId": "f-1"}]
     assert boto.calls[-1] == (
         "list_findings",
         {"agentSpaceId": "space-1", "pentestJobId": "job-1"},
@@ -261,3 +254,147 @@ def test_avec_un_role_le_client_assume_le_role_d_operateur(monkeypatch):
     assert assumed["ExternalId"] == "shared-external-id"
     assert creds["aws_access_key_id"] == "AKIA"
     assert creds["aws_session_token"] == "token"
+
+
+def test_assumer_un_role_exige_un_nom_de_session(monkeypatch):
+    """DÉFAUT TROUVÉ PAR LA REVUE DE CODE (14 nov 2026, agent InferHub).
+
+    `sts:AssumeRole` exige `RoleSessionName` : botocore le valide **localement**,
+    avant tout appel réseau, et répond `ParamValidationError`. Sans ce
+    paramètre, l'assomption du rôle d'opérateur échouait à chaque fois — le
+    chemin cross-account du client était donc inutilisable.
+    """
+    captured: dict[str, Any] = {}
+
+    class _FakeSts:
+        def assume_role(self, **kwargs: Any) -> dict[str, Any]:
+            captured.update(kwargs)
+            return {
+                "Credentials": {
+                    "AccessKeyId": "AKIA",
+                    "SecretAccessKey": "secret",
+                    "SessionToken": "token",
+                }
+            }
+
+    import rempart.orchestrator.sa_client as module
+
+    monkeypatch.setattr(module.boto3, "client", lambda *a, **k: _FakeSts())
+    client = SecurityAgentClient(
+        region="eu-north-1",
+        role_arn="arn:aws:iam::710332178565:role/rempart-ops-role",
+        external_id="shared-external-id",
+    )
+    client._credentials()
+
+    assert captured.get("RoleSessionName"), "RoleSessionName absent : l'appel STS échoue"
+    assert len(captured["RoleSessionName"]) <= 64
+
+
+def test_le_nom_de_session_est_valide_pour_sts(monkeypatch):
+    """Le nom doit respecter les contraintes de l'API : 2–64 caractères, jeu limité."""
+    captured: dict[str, Any] = {}
+
+    class _FakeSts:
+        def assume_role(self, **kwargs: Any) -> dict[str, Any]:
+            captured.update(kwargs)
+            return {
+                "Credentials": {
+                    "AccessKeyId": "AKIA",
+                    "SecretAccessKey": "secret",
+                    "SessionToken": "token",
+                }
+            }
+
+    import rempart.orchestrator.sa_client as module
+
+    monkeypatch.setattr(module.boto3, "client", lambda *a, **k: _FakeSts())
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "Lambda de contrôle / prod (x)")
+    client = SecurityAgentClient(
+        region="eu-north-1",
+        role_arn="arn:aws:iam::710332178565:role/rempart-ops-role",
+        external_id="shared-external-id",
+    )
+    client._credentials()
+
+    name = captured["RoleSessionName"]
+    assert 2 <= len(name) <= 64
+    assert all(c.isalnum() or c in "_+=,.@-" for c in name), name
+
+
+def test_un_role_sans_external_id_est_refuse(monkeypatch):
+    """Sans external id, la protection anti-confused-deputy disparaît en silence."""
+    client = SecurityAgentClient(
+        region="eu-north-1",
+        role_arn="arn:aws:iam::710332178565:role/rempart-ops-role",
+    )
+    with pytest.raises(ValueError, match="EXTERNAL_ID"):
+        client._credentials()
+
+
+class _ExpiringSts:
+    """STS factice dont les identifiants expirent quand on le dit."""
+
+    def __init__(self, expiry: datetime) -> None:
+        self.expiry = expiry
+        self.calls = 0
+
+    def assume_role(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls += 1
+        return {
+            "Credentials": {
+                "AccessKeyId": "AKIA",
+                "SecretAccessKey": "secret",
+                "SessionToken": "token",
+                "Expiration": self.expiry,
+            }
+        }
+
+
+def _patch_clients(monkeypatch, sts):
+    """Faux STS + faux SecurityAgent, distingués par le nom de service."""
+    import rempart.orchestrator.sa_client as module
+
+    class _SecurityAgent:
+        pass
+
+    monkeypatch.setattr(
+        module.boto3,
+        "client",
+        lambda name, **kw: sts if name == "sts" else _SecurityAgent(),
+    )
+
+
+def test_un_client_aux_identifiants_expires_est_reconstruit(monkeypatch):
+    """DÉFAUT TROUVÉ PAR LA REVUE (14 nov 2026) : les identifiants expirés.
+
+    `AssumeRole` renvoie des identifiants valides 1 h. L'orchestrateur suit un
+    job jusqu'à 4 h : sans renouvellement, la 2ᵉ heure rend `ExpiredToken`.
+    """
+    sts = _ExpiringSts(datetime.now(timezone.utc) - timedelta(minutes=1))
+    _patch_clients(monkeypatch, sts)
+    client = SecurityAgentClient(
+        region="eu-north-1",
+        role_arn="arn:aws:iam::710332178565:role/rempart-ops-role",
+        external_id="shared-external-id",
+    )
+    client._credentials()
+    assert client._expired() is True
+    # Un nouveau client est construit, donc une nouvelle assomption.
+    client.client
+    assert sts.calls == 2
+
+
+def test_un_client_valide_est_reutilise(monkeypatch):
+    """Tant que les identifiants sont valides, on ne réassume pas de rôle."""
+    sts = _ExpiringSts(datetime.now(timezone.utc) + timedelta(hours=1))
+    _patch_clients(monkeypatch, sts)
+    client = SecurityAgentClient(
+        region="eu-north-1",
+        role_arn="arn:aws:iam::710332178565:role/rempart-ops-role",
+        external_id="shared-external-id",
+    )
+    client.client
+    client.client
+    assert sts.calls == 1
+    assert client._expired() is False

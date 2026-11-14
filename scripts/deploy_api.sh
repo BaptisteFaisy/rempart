@@ -22,6 +22,17 @@ ACCOUNT="${ACCOUNT:-710332178565}"
 API_ID="${API_ID:-qm6dmdkgdg}"
 PORTAL_ORIGIN="${PORTAL_ORIGIN:-https://d1o2xnfrq8xomh.cloudfront.net}"
 AWS="${AWS:-$HOME/.local/bin/aws}"
+# Clé du modèle de triage : NOM du paramètre SSM SecureString, jamais sa valeur.
+#
+# PIÈGE MESURÉ (14/11/2026) : ce paramètre conditionne à la fois la variable
+# d'environnement de la Lambda de triage ET son droit `ssm:GetParameter`
+# (voir stacks/orchestrator.py::_grant_llm_key_read). Oublié au déploiement,
+# rien ne casse : la Lambda tourne, le triage retombe **silencieusement** sur le
+# règleur déterministe, et la production n'a plus de vrai modèle. D'où un défaut
+# ici, pas un avertissement : la valeur par défaut est le paramètre de
+# production, et son existence est vérifiée avant le changeset.
+LLM_KEY_PARAM="${REMPART_LLM_API_KEY_SSM_PARAM:-/rempart/prod/llm-key}"
+export REMPART_LLM_API_KEY_SSM_PARAM="$LLM_KEY_PARAM"
 # L'orchestrateur est inclus : l'intake des failles (`collect_findings`) et
 # l'agent de triage y vivent, pas dans la Lambda API.
 STACKS=("RempartStorageStack" "RempartApiStack" "RempartOrchestratorStack")
@@ -40,6 +51,25 @@ python3 -c "import aws_cdk" 2>/dev/null \
 
 SYNTH_ONLY=0
 [ "${1:-}" = "--synth-only" ] && SYNTH_ONLY=1
+
+# ---- Paramètre de la clé du modèle --------------------------------------------
+# Le nom seul est passé au CDK : la valeur SecureString n'est jamais lue ni
+# imprimée par le script. Un paramètre absent signifierait un triage sans modèle.
+prove_llm_param_exists() {
+  local name="$1"
+  local found
+  found="$("$AWS" ssm describe-parameters --region "$REGION" \
+    --query "Parameters[?Name=='$name'].Name | [0]" --output text 2>/dev/null || echo '')"
+  if [ "$found" = "$name" ]; then
+    log "paramètre de la clé du modèle : $name (existe)"
+  else
+    fail "paramètre SSM '$name' introuvable : le triage tournerait sans modèle. Crée-le ou définis REMPART_LLM_API_KEY_SSM_PARAM."
+  fi
+}
+
+if [ "$SYNTH_ONLY" != "1" ]; then
+  prove_llm_param_exists "$LLM_KEY_PARAM"
+fi
 
 # ---- Layer Lambda -------------------------------------------------------------
 # Les dépendances tierces (fpdf2, requests, strands) ne sont pas versionnées :
@@ -124,3 +154,41 @@ TASK_COUNT="$("$AWS" lambda list-functions --region "$REGION" \
   --query "length(Functions[?starts_with(FunctionName, 'RempartOrchestratorStack')])" \
   --output text 2>/dev/null || echo '?')"
 echo "  Lambdas orchestrateur : $TASK_COUNT"
+
+# ---- Preuve : le triage a bien un vrai modèle ---------------------------------
+# Le câblage du modèle tient à UNE variable de déploiement qui pilote deux
+# moitiés (la variable d'environnement de la Lambda qui trie, et le droit
+# `ssm:GetParameter` sur son rôle). Son oubli est invisible : la fonction
+# tourne, le règleur déterministe répond à la place du modèle, et rien ne
+# signale que la production n'a plus d'agent LLM. Mesuré le 14/11/2026.
+prove_llm_wiring() {
+  local fn role rn p doc env_param ssm_ok='' kms_ok=''
+  fn="$("$AWS" lambda list-functions --region "$REGION" \
+    --query "Functions[?starts_with(FunctionName, 'RempartOrchestratorStack-LambdaDispatchTriage')].FunctionName | [0]" \
+    --output text 2>/dev/null || echo '')"
+  if [ -z "$fn" ] || [ "$fn" = "None" ]; then
+    echo "  PREUVE ÉCHEC            : Lambda de triage introuvable (aucun vrai modèle possible)"
+    return 0
+  fi
+  env_param="$("$AWS" lambda get-function-configuration --function-name "$fn" --region "$REGION" \
+    --query 'Environment.Variables.REMPART_LLM_API_KEY_SSM_PARAM' --output text 2>/dev/null || echo '')"
+  role="$("$AWS" lambda get-function-configuration --function-name "$fn" --region "$REGION" \
+    --query 'Role' --output text 2>/dev/null || echo '')"
+  rn="${role##*/}"
+  for p in $("$AWS" iam list-role-policies --role-name "$rn" --query 'PolicyNames[]' --output text 2>/dev/null); do
+    doc="$("$AWS" iam get-role-policy --role-name "$rn" --policy-name "$p" --query 'PolicyDocument' --output json 2>/dev/null || echo '{}')"
+    case "$doc" in *ssm:GetParameter*) ssm_ok=1 ;; esac
+    case "$doc" in *kms:Decrypt*) kms_ok=1 ;; esac
+  done
+  echo "  Lambda de triage      : $fn"
+  echo "  paramètre de la clé   : ${env_param:-absent}"
+  if [ "$env_param" = "$LLM_KEY_PARAM" ] && [ -n "$ssm_ok" ] && [ -n "$kms_ok" ]; then
+    echo "  PREUVE OK               : le triage peut réellement lire la clé du modèle ($env_param)"
+  else
+    echo "  PREUVE ÉCHEC            : triage SANS modèle (variable=$env_param, ssm:GetParameter=${ssm_ok:-non}, kms:Decrypt=${kms_ok:-non})"
+  fi
+}
+
+echo
+log "== Preuve : le vrai modèle de triage est câblé =="
+prove_llm_wiring
