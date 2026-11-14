@@ -5,6 +5,26 @@ from dataclasses import dataclass
 from typing import Any
 
 
+class FakeRetestStarter:
+    """Démarreur d'exécutions de test : enregistre les appels, joue le rejouement.
+
+    Même contrat que ``rempart.orchestrator.retest.StepFunctionsStarter`` :
+    ``start(name, payload)``, et ``DuplicateExecution`` quand un nom revient.
+    `fail_after` reproduit le comportement réel de Step Functions — le premier
+    démarrage passe, le doublon est refusé.
+    """
+
+    def __init__(self, error: Exception | None = None, fail_after: int = 0) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.error = error
+        self.fail_after = fail_after
+
+    def start(self, name: str, payload: dict[str, Any]) -> None:
+        self.calls.append((name, payload))
+        if self.error is not None and len(self.calls) > self.fail_after:
+            raise self.error
+
+
 class FakeGitHub:
     """In-memory GitHub client fake."""
 

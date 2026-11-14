@@ -7,7 +7,11 @@ Ce dossier contient les **fiches de preuves** :
 - [`2026-11-13-session-llm-production.md`](2026-11-13-session-llm-production.md) —
   le 13/11/2026 : le **vrai modèle** (InferHub) rendu effectif en production, et
   5 défauts trouvés en route (asset/synthèse, dépendances, clé SSM, repli
-  muet, métadonnées du layer).
+  muet, métadonnées du layer) ;
+- [`2026-11-14-boucle-pr-mergee.md`](2026-11-14-boucle-pr-mergee.md) — la
+  boucle de retest (idée #51) : rien ne démarrait jamais `RempartRetestClose` ;
+  webhook GitHub signé, isolation par dépôt, idempotence face aux rejouements,
+  et le routage placé après « run terminé ».
 
 Pour chaque défaut : le symptôme mesuré *avant*, le commit du correctif, et la
 preuve *après* — avec la valeur observée et la commande qui la produit.

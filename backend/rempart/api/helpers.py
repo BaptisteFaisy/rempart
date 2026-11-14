@@ -10,7 +10,7 @@ from typing import Any
 
 from rempart.api.context import ApiContext
 from rempart.common.budget import DEFAULT_HOURLY_RATE, BudgetVerdict, check_budget
-from rempart.common.models import BudgetState, Tenant
+from rempart.common.models import Application, BudgetState, Tenant
 from rempart.common.store import Store
 from rempart.common.tenant import (
     AuthError,
@@ -69,6 +69,21 @@ def load_or_404(
 def load_tenant_or_404(store: Store, tenant_id: str) -> tuple[Tenant | None, Response | None]:
     """Fetch a tenant or return the standard 404 response."""
     return load_or_404(store.get_tenant, tenant_id, "Tenant")
+
+def application_for_repository(store: Store, repository: str) -> Application | None:
+    """L'application cliente qui possède ce dépôt (« owner/repo »), sinon None.
+
+    Partagée par les deux webhooks : c'est la seule jointure possible entre un
+    événement GitHub et un locataire, donc elle ne doit pas avoir deux
+    implémentations — la seconde pourrait oublier le contrôle d'existence.
+    """
+    if not repository:
+        return None
+    for app in store.list_applications():
+        if repository in (app.repositories or []):
+            return app
+    return None
+
 
 def current_month() -> str:
     """Return the current billing month as ``YYYY-MM``."""

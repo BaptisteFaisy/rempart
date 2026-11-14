@@ -60,6 +60,14 @@ class Settings:
     # Clé partagée du webhook CI/CD (`POST /v1/events/deployment`). Jamais
     # écrite en clair dans le template : l'IaC la lit depuis SSM.
     pipeline_key: str | None = None
+    # Secret partagé du webhook GitHub (`POST /v1/events/github`, idée #51), signé
+    # `X-Hub-Signature-256` sur les octets bruts. Même règle : lu depuis SSM,
+    # jamais écrit en clair dans le template CloudFormation.
+    github_webhook_secret: str | None = None
+    # ARN de la machine qui exécute un retest (`RempartPentestLifecycle`, branche
+    # `trigger: "retest"`). Absent = aucun retest automatiquement démarré : la
+    # route pose l'état et le dit, au lieu de promettre un test qui ne part pas.
+    retest_machine_arn: str | None = None
     # Garde-fou anti-facture : aucun test réel sans éligibilité free tier
     # confirmée, et un plafond d'heures-tâches par test.
     free_tier_only: bool = True
@@ -86,6 +94,10 @@ class Settings:
             reports_bucket=os.environ.get("REMPART_REPORTS_BUCKET") or None,
             cors_allow_origins=_origins("REMPART_CORS_ALLOW_ORIGINS"),
             pipeline_key=os.environ.get("REMPART_PIPELINE_KEY") or None,
+            github_webhook_secret=(
+                os.environ.get("REMPART_GITHUB_WEBHOOK_SECRET") or None
+            ),
+            retest_machine_arn=os.environ.get("REMPART_RETEST_MACHINE_ARN") or None,
             free_tier_only=_bool("REMPART_FREE_TIER_ONLY", True),
             max_task_hours_per_test=_float("REMPART_MAX_TASK_HOURS_PER_TEST", 5.0),
             concurrent_test_quota=int(

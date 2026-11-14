@@ -44,6 +44,26 @@ from .task_types import (
 from .triage_dispatch import apply_proposals, load_findings, run_proposals
 
 
+def _job_options(payload: dict[str, Any]) -> dict[str, Any]:
+    """Options documentées de `StartPentestJob`, portées par le payload.
+
+    `jobType` (FULL | REVALIDATION | CICD) et `selectedFindingIds` existent dans
+    le modèle officiel (service `securityagent`, 2025-09-06). Un retest déclenché
+    par une fusion les pose : sans `selectedFindingIds`, Continuum retesterait
+    toute l'application alors qu'une seule correction a été mergée — plus cher à
+    50 $/heure-tâche, et la preuve de fermeture (EF-COR-04) deviendrait ambiguë :
+    quelle faille ce run a-t-il éteinte ?
+    """
+    options: dict[str, Any] = {}
+    job_type = str(payload.get("job_type") or "").strip()
+    if job_type:
+        options["jobType"] = job_type.upper()
+    finding_ids = [str(fid) for fid in (payload.get("finding_ids") or []) if fid]
+    if finding_ids:
+        options["selectedFindingIds"] = finding_ids
+    return options
+
+
 # --------------------------------------------------------------------------- #
 def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
     """Start the Security Agent pentest job and record the run."""
@@ -52,7 +72,9 @@ def start_run(payload: dict[str, Any], deps: Deps) -> dict[str, Any]:
         return {**payload, "error": "unknown_application"}
 
     # StartPentestJob : agentSpaceId + pentestId requis ; réponse ``pentestJobId``.
-    resp = deps.sa.start_pentest_job(app.agent_space_id, payload["pentest_id"])
+    resp = deps.sa.start_pentest_job(
+        app.agent_space_id, payload["pentest_id"], **_job_options(payload)
+    )
     job_id = resp.get("pentestJobId") or resp.get("jobId") or f"job-{uuid.uuid4().hex[:8]}"
     run = Run(
         run_id=job_id,

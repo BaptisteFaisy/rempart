@@ -213,6 +213,7 @@ def _build_context(
     sa: Any,
     settings: Settings,
     s3: Any = None,
+    retest: Any = None,
 ) -> ApiContext:
     """Assemble the ApiContext handed to a route handler."""
     return ApiContext(
@@ -226,6 +227,8 @@ def _build_context(
         sa=sa,
         s3=s3,
         origin=_origin_of(request),
+        raw_body=request.body if isinstance(request.body, str) else None,
+        retest=retest,
     )
 
 def _dispatch(handler: Handler, ctx: ApiContext) -> dict[str, Any]:
@@ -257,6 +260,28 @@ def _default_s3(settings: Settings) -> Any:
     return _ReportsBucket(boto3.client("s3", region_name=settings.region), bucket)
 
 
+def _default_retest_starter(settings: Settings) -> Any:
+    """Démarreur d'exécutions de la machine de retest (idée #51).
+
+    `None` quand aucun ARN n'est configuré — même discipline que le bucket des
+    preuves : mieux vaut un état posé et annoncé comme tel qu'une promesse de
+    retest que personne n'exécutera. L'ARN vient de l'IaC (paramètre d'environ-
+    nement de la Lambda API), jamais d'un corps de requête : la route ne peut
+    donc pas choisir une machine qui n'est pas la sienne.
+    """
+    arn = getattr(settings, "retest_machine_arn", None)
+    if not arn:
+        return None
+    try:
+        import boto3
+    except ImportError:  # pragma: no cover - boto3 est toujours présent en Lambda
+        return None
+    from rempart.orchestrator.retest import StepFunctionsStarter
+
+    client = boto3.client("stepfunctions", region_name=settings.region)
+    return StepFunctionsStarter(client, arn)
+
+
 class _ReportsBucket:
     """Client S3 restreint à ce que le dossier de preuves utilise."""
 
@@ -284,6 +309,7 @@ def lambda_handler(
     store: Any = None,
     sa: Any = None,
     s3: Any = None,
+    retest: Any = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     """Handle an API Gateway HTTP API v2 request, dispatching to the matched route."""
@@ -292,6 +318,8 @@ def lambda_handler(
         store = Store(table_prefix=settings.table_prefix)
     if sa is None:
         sa = _default_sa(settings)
+    if retest is None:
+        retest = _default_retest_starter(settings)
 
     request = _parse_request(event)
     origin = _origin_of(request)
@@ -316,5 +344,7 @@ def lambda_handler(
         )
 
     handler, path_params = matched
-    ctx = _build_context(event, request, body, path_params, store, sa, settings, s3)
+    ctx = _build_context(
+        event, request, body, path_params, store, sa, settings, s3, retest
+    )
     return _dispatch(handler, ctx)

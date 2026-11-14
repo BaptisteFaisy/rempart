@@ -10,6 +10,7 @@ import aws_cdk.aws_cognito as cognito
 import aws_cdk.aws_dynamodb as ddb
 import aws_cdk.aws_iam as iam
 import aws_cdk.aws_s3 as s3
+import aws_cdk.aws_stepfunctions as sfn
 from constructs import Construct
 
 from ._helpers import (
@@ -20,9 +21,19 @@ from ._helpers import (
     securityagent_policy,
 )
 
-# En-têtes réellement envoyés par le portail (jeton Cognito, corps JSON) et par
-# les pipelines CI/CD (clé partagée du webhook de déploiement).
-CORS_ALLOW_HEADERS = ["Authorization", "Content-Type", "X-Rempart-Key"]
+# En-têtes réellement envoyés par le portail (jeton Cognito, corps JSON), par les
+# pipelines CI/CD (clé partagée du webhook de déploiement) et par GitHub
+# (signature + type d'événement du webhook de retest, idée #51). Un en-tête
+# absent de cette liste est supprimé par le preflight : la route refuserait la
+# signature avant même de l'avoir reçue.
+CORS_ALLOW_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "X-Rempart-Key",
+    "X-Hub-Signature-256",
+    "X-GitHub-Event",
+    "X-GitHub-Delivery",
+]
 CORS_ALLOW_METHODS = [
     apigwv2.CorsHttpMethod.GET,
     apigwv2.CorsHttpMethod.POST,
@@ -47,12 +58,20 @@ class ApiStack(cdk.Stack):
         reports_bucket: s3.IBucket | None = None,
         portal_origins: list[str] | None = None,
         pipeline_key_param: str | None = None,
+        github_webhook_secret_param: str | None = None,
+        retest_machine: sfn.IStateMachine | None = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
         self.portal_origins = list(portal_origins or [])
+        self.retest_machine = retest_machine
         self.api_lambda = self._create_api_lambda(
-            tables, table_prefix, hourly_rate, reports_bucket, pipeline_key_param
+            tables,
+            table_prefix,
+            hourly_rate,
+            reports_bucket,
+            pipeline_key_param,
+            github_webhook_secret_param,
         )
         self.jwt_authorizer = self._create_authorizer(user_pool, user_pool_client)
         self.http_api = self._create_http_api()
@@ -71,13 +90,18 @@ class ApiStack(cdk.Stack):
         hourly_rate: float,
         reports_bucket: s3.IBucket | None = None,
         pipeline_key_param: str | None = None,
+        github_webhook_secret_param: str | None = None,
     ) -> cdk.aws_lambda.Function:
         fn = create_python_lambda(
             self,
             "RempartApiFunction",
             handler="rempart.api.app.lambda_handler",
             environment=self._environment(
-                table_prefix, hourly_rate, reports_bucket, pipeline_key_param
+                table_prefix,
+                hourly_rate,
+                reports_bucket,
+                pipeline_key_param,
+                github_webhook_secret_param,
             ),
             layers=self._layers(),
             timeout_seconds=30,
@@ -85,6 +109,7 @@ class ApiStack(cdk.Stack):
         )
         for table in tables.values():
             table.grant_read_write_data(fn)
+        self._grant_retest_start(fn)
         if reports_bucket is not None:
             # EF-RAP-04 : le dossier de preuves doit être réellement conservé.
             reports_bucket.grant_read_write(fn)
@@ -108,12 +133,24 @@ class ApiStack(cdk.Stack):
         )
         return fn
 
+    def _grant_retest_start(self, fn: cdk.aws_lambda.Function) -> None:
+        """Idée #51 : une PR mergée doit pouvoir démarrer LE retest, et rien d'autre.
+
+        La machine est fixée à la construction (celle du plan de contrôle), jamais
+        lisible dans le corps de requête : sinon l'appelant choisirait l'ARN à
+        exécuter dans le compte. Une seule action, une seule ressource.
+        """
+        if self.retest_machine is None:
+            return
+        self.retest_machine.grant_start_execution(fn)
+
     def _environment(
         self,
         table_prefix: str,
         hourly_rate: float,
         reports_bucket: s3.IBucket | None,
         pipeline_key_param: str | None,
+        github_webhook_secret_param: str | None = None,
     ) -> dict[str, str]:
         """Variables d'environnement de la Lambda API (aucun secret en clair)."""
         environment = {
@@ -129,14 +166,28 @@ class ApiStack(cdk.Stack):
         }
         if reports_bucket is not None:
             environment["REMPART_REPORTS_BUCKET"] = reports_bucket.bucket_name
-        if pipeline_key_param:
-            # Référence dynamique SSM SecureString : la valeur est résolue par
-            # CloudFormation au déploiement et n'apparaît JAMAIS dans le template.
-            reference = cdk.CfnDynamicReference(
-                cdk.CfnDynamicReferenceService.SSM_SECURE, pipeline_key_param
+        # Les deux secrets de webhook (pipeline CI/CD, GitHub) portent le même
+        # contrat : référencés depuis SSM SecureString, résolus par
+        # CloudFormation au déploiement, JAMAIS écrits en clair dans le template.
+        for env_name, param in (
+            ("REMPART_PIPELINE_KEY", pipeline_key_param),
+            ("REMPART_GITHUB_WEBHOOK_SECRET", github_webhook_secret_param),
+        ):
+            if param:
+                environment[env_name] = self._ssm_reference(param)
+        if self.retest_machine is not None:
+            # Fixe côté serveur : le corps de requête ne choisit jamais un ARN.
+            environment["REMPART_RETEST_MACHINE_ARN"] = (
+                self.retest_machine.state_machine_arn
             )
-            environment["REMPART_PIPELINE_KEY"] = reference.to_string()
         return environment
+
+    @staticmethod
+    def _ssm_reference(param: str) -> str:
+        """Référence dynamique SSM SecureString (aucune valeur en clair)."""
+        return cdk.CfnDynamicReference(
+            cdk.CfnDynamicReferenceService.SSM_SECURE, param
+        ).to_string()
 
     def _create_authorizer(
         self,
@@ -181,6 +232,17 @@ class ApiStack(cdk.Stack):
         )
         api.add_routes(
             path="/v1/events/deployment",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=integration,
+        )
+        # Idée #51 : le webhook GitHub, second point d'entrée sans jeton. Mêmes
+        # règles que celui du pipeline CI/CD — l'authentification vit dans le
+        # code (secret SSM + HMAC sur les octets bruts du corps), donc AUCUN
+        # autorisateur JWT ici : GitHub ne possède pas de jeton Cognito, et un
+        # 401 sur ce chemin signifierait que la boucle de retest ne peut jamais
+        # se fermer toute seule.
+        api.add_routes(
+            path="/v1/events/github",
             methods=[apigwv2.HttpMethod.POST],
             integration=integration,
         )
