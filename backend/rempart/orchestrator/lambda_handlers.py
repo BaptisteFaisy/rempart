@@ -77,7 +77,10 @@ def build_deps(settings: Settings | None = None) -> Deps:
     return Deps(
         store=Store(table_prefix=settings.table_prefix),
         sa=SecurityAgentClient(
-            endpoint_url=settings.sa_endpoint_url, region=settings.region
+            endpoint_url=settings.sa_endpoint_url,
+            region=settings.region,
+            role_arn=settings.sa_role_arn,
+            external_id=settings.sa_external_id,
         ),
         settings=settings,
         github=_github_client(settings),

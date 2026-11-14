@@ -218,3 +218,46 @@ def test_list_pentest_job_tasks_sans_job_renvoie_toutes_les_taches():
     client, boto = _client()
     client.list_pentest_job_tasks("space-1")
     assert boto.calls[-1] == ("list_pentest_job_tasks", {"agentSpaceId": "space-1"})
+
+
+def test_sans_role_le_client_parle_avec_les_identifiants_courants():
+    """Déploiement dans un compte unique : pas d'assomption de rôle."""
+    client = SecurityAgentClient(region="eu-north-1")
+    assert client._credentials() == {}
+
+
+def test_avec_un_role_le_client_assume_le_role_d_operateur(monkeypatch):
+    """INCIDENT RÉEL (13 nov 2026) : le rôle n'était JAMAIS assumé.
+
+    Le rôle `rempart-ops-role` du compte client porte les droits
+    `securityagent:*` ; sans assomption, l'appel partait avec les identifiants
+    de la Lambda du plan de contrôle et se faisait refuser
+    (« not authorized to perform: securityagent:StartPentestJob »).
+    """
+    assumed: dict[str, Any] = {}
+
+    class _FakeSts:
+        def assume_role(self, **kwargs: Any) -> dict[str, Any]:
+            assumed.update(kwargs)
+            return {
+                "Credentials": {
+                    "AccessKeyId": "AKIA",
+                    "SecretAccessKey": "secret",
+                    "SessionToken": "token",
+                }
+            }
+
+    import rempart.orchestrator.sa_client as module
+
+    monkeypatch.setattr(module.boto3, "client", lambda *a, **k: _FakeSts())
+    client = SecurityAgentClient(
+        region="eu-north-1",
+        role_arn="arn:aws:iam::710332178565:role/rempart-ops-role",
+        external_id="shared-external-id",
+    )
+    creds = client._credentials()
+
+    assert assumed["RoleArn"] == "arn:aws:iam::710332178565:role/rempart-ops-role"
+    assert assumed["ExternalId"] == "shared-external-id"
+    assert creds["aws_access_key_id"] == "AKIA"
+    assert creds["aws_session_token"] == "token"

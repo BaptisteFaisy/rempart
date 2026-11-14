@@ -30,8 +30,10 @@ from constructs import Construct
 from ._helpers import (
     DEFAULT_TABLE_PREFIX,
     create_python_lambda,
+    grant_securityagent,
     handler_reference,
     runtime_layer,
+    securityagent_policy,
 )
 
 HANDLER_MODULE = "rempart.orchestrator.lambda_handlers"
@@ -98,6 +100,15 @@ class OrchestratorStack(cdk.Stack):
             "REMPART_MAX_TASK_HOURS_PER_TEST": "5",
         }
         common_env.update(self._llm_env())
+        common_env.update(self._sa_env())
+        # Droits Continuum : sans eux, StartPentestJob est refusé (mesuré le
+        # 13/11/2026). Une politique gérée partagée, pas des instructions
+        # inline : au-delà de 10 240 caractères, CDK déplace la politique et
+        # emporte au passage les autres instructions (droits de la clé du
+        # modèle disparus, sans erreur).
+        self.securityagent_policy = securityagent_policy(
+            self, account=self.account, region=self.region
+        )
         self.lambdas: dict[str, _lambda.Function] = {
             name: self._create_task_lambda(name, common_env, tables) for name in TASK_NAMES
         }
@@ -124,6 +135,28 @@ class OrchestratorStack(cdk.Stack):
             layer = runtime_layer(self, "RempartRuntimeLayer")
             self._runtime_layer_cache = [layer] if layer else []
         return self._runtime_layer_cache
+
+    def _sa_env(self) -> dict[str, str]:
+        """Variables du rôle d'opérateur Continuum (cross-account).
+
+        Le rôle `rempart-ops-role` du compte client porte les droits
+        `securityagent:*` ; le plan de contrôle l'assume pour piloter les
+        tests. Sans ces variables, le client parle avec les identifiants de la
+        Lambda — ce qui convient au déploiement dans un compte unique (les
+        droits sont alors accordés directement, voir `grant_securityagent`).
+
+        NOTE : une référence dynamique SSM ne peut PAS être utilisée ici :
+        CloudFormation refuse `resolve:ssm-secure` dans les variables
+        d'environnement d'une Lambda (mesuré le 13/11/2026). L'external id
+        est donc injecté par l'environnement de déploiement ; en production,
+        il doit venir d'un paramètre SSM lu au démarrage.
+        """
+        env: dict[str, str] = {}
+        for name in ("REMPART_SA_ROLE_ARN", "REMPART_SA_EXTERNAL_ID"):
+            value = os.environ.get(name)
+            if value:
+                env[name] = value
+        return env
 
     def _llm_env(self) -> dict[str, str]:
         """Variables du modèle de triage (EF-TRI-01).
@@ -169,12 +202,14 @@ class OrchestratorStack(cdk.Stack):
         name = parameter if parameter.startswith("/") else f"/{parameter}"
         triage.add_to_role_policy(
             iam.PolicyStatement(
+                sid="RempartLlmKeyRead",
                 actions=["ssm:GetParameter"],
                 resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter{name}"],
             )
         )
         triage.add_to_role_policy(
             iam.PolicyStatement(
+                sid="RempartLlmKeyDecrypt",
                 actions=["kms:Decrypt"],
                 resources=["*"],
                 conditions={
@@ -200,8 +235,13 @@ class OrchestratorStack(cdk.Stack):
         )
         for table in tables.values():
             table.grant_read_write_data(fn)
+        # Droits Continuum : sans eux, StartPentestJob est refusé (mesuré le
+        # 13/11/2026) et le rôle d'opérateur du client, lui, sert au
+        # déploiement cross-account.
+        grant_securityagent(fn, self.securityagent_policy)
         fn.add_to_role_policy(
             iam.PolicyStatement(
+                sid="RempartAssumeOpsRole",
                 actions=["sts:AssumeRole"],
                 resources=["arn:aws:iam::*:role/rempart-ops-role"],
             )

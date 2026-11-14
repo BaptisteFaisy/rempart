@@ -12,7 +12,13 @@ import aws_cdk.aws_iam as iam
 import aws_cdk.aws_s3 as s3
 from constructs import Construct
 
-from ._helpers import DEFAULT_TABLE_PREFIX, create_python_lambda, runtime_layer
+from ._helpers import (
+    DEFAULT_TABLE_PREFIX,
+    create_python_lambda,
+    grant_securityagent,
+    runtime_layer,
+    securityagent_policy,
+)
 
 # En-têtes réellement envoyés par le portail (jeton Cognito, corps JSON) et par
 # les pipelines CI/CD (clé partagée du webhook de déploiement).
@@ -82,8 +88,20 @@ class ApiStack(cdk.Stack):
         if reports_bucket is not None:
             # EF-RAP-04 : le dossier de preuves doit être réellement conservé.
             reports_bucket.grant_read_write(fn)
+        # L'onboarding parle à Continuum (domaine, espace, pentest) : sans ces
+        # droits, il se fait refuser (mesuré le 13/11/2026). L'action est posée
+        # APRÈS les autres droits : CDK fusionne les instructions d'une même
+        # politique, et l'ordre évite qu'une instruction remplace la précédente.
+        grant_securityagent(
+            fn,
+            securityagent_policy(
+                self, account=self.account, region=self.region,
+                id_="RempartApiSecurityAgentPolicy",
+            ),
+        )
         fn.add_to_role_policy(
             iam.PolicyStatement(
+                sid="RempartAssumeOpsRole",
                 actions=["sts:AssumeRole"],
                 resources=["arn:aws:iam::*:role/rempart-ops-role"],
             )
